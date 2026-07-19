@@ -1,0 +1,87 @@
+<html><head><meta charset="utf-8"><title>cloud-itonami-isic-7820 &middot; temporary-employment-agency</title><style>
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ok { color: #137a3f; }
+body { font-family: system-ui,-apple-system,sans-serif; margin: 0; color: #1a1a1a; background: #fafafa; }
+header.bar { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e5e5; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+h2 { margin-top: 0; font-size: 15px; }
+.warn { color: #b25c00; background: #fff8e1; padding: 2px 6px; border-radius: 4px; }
+main { max-width: 1080px; margin: 24px auto; padding: 0 20px; }
+header.bar h1 { font-size: 18px; margin: 0; font-weight: 600; }
+.muted { color: #888; font-size: 13px; }
+.critical { color: #fff; background: #b3261e; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.err { color: #b3261e; background: #fbe9e7; padding: 2px 6px; border-radius: 4px; }
+th { font-weight: 600; color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+header.bar .badge { margin-left: auto; font-size: 12px; color: #666; }
+code { font-size: 12px; background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+</style></head><body>
+<header class="bar">
+  <h1>Temporary employment agency (ISIC 7820) — Operator Console</h1>
+  <span class="badge">read-only sample · governor-gated · never disburses payroll or moves money</span>
+</header>
+<main>
+  <section class="card">
+    <h2>Managed assignments</h2>
+    <p class="muted">Demo snapshot — build-time-generated from <code>staffing.store</code> via <code>staffing.render-html</code> (<code>clojure -M:dev:render-html</code>), regenerated nightly.</p>
+    <table>
+      <thead><tr><th>Assignment</th><th>Worker</th><th>Client</th><th>Jurisdiction</th><th>Role</th><th>Status</th><th>Last op status</th></tr></thead>
+      <tbody>
+        <tr><td>a-100</td><td>Kenji Sato (demo)</td><td>デモ製造株式会社</td><td>jpn</td><td>line-worker</td><td>active</td><td><span class="ok">committed</span></td></tr>
+        <tr><td>a-300</td><td>Maria Schmidt (demo)</td><td>Demo Logistics GmbH</td><td>deu</td><td>warehouse-forklift-operator</td><td>active</td><td><span class="muted">no activity</span></td></tr>
+        <tr><td>a-hz1</td><td>Maria Schmidt (demo)</td><td>Demo Logistics GmbH</td><td>deu</td><td>crane-operator</td><td>active</td><td><span class="ok">committed</span></td></tr>
+        <tr><td>a-usa1</td><td>田中 花子(デモ)</td><td>Demo Warehousing Inc (USA)</td><td>usa</td><td>picker</td><td>active</td><td><span class="ok">committed</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Scenario steps (this run)</h2>
+    <p class="muted">Real per-step telemetry captured from actually driving the <code>langgraph.graph</code> StateGraph — a genuine mix of dispositions: auto-commit, escalate-then-approve, and HARD hold (never reaches a human).</p>
+    <table>
+      <thead><tr><th>Step</th><th>Op</th><th>Subject</th><th>Actor role</th><th>Workflow</th><th>Final disposition</th></tr></thead>
+      <tbody>
+        <tr><td><code>p1-place-clean</code></td><td><code>place</code></td><td>a-usa1</td><td>staffing-coordinator</td><td><span class="ok">auto-commit</span></td><td><code>commit</code></td></tr>
+        <tr><td><code>p2-place-no-eligibility</code></td><td><code>place</code></td><td>a-bad1</td><td>staffing-coordinator</td><td><span class="critical">HARD hold (no human reached)</span></td><td><code>hold</code></td></tr>
+        <tr><td><code>p3-extend-over-cap</code></td><td><code>extend</code></td><td>a-100</td><td>staffing-coordinator</td><td><span class="critical">HARD hold (no human reached)</span></td><td><code>hold</code></td></tr>
+        <tr><td><code>p4-timesheet-miscalc</code></td><td><code>approve</code></td><td>a-100</td><td>payroll-officer</td><td><span class="critical">HARD hold (no human reached)</span></td><td><code>hold</code></td></tr>
+        <tr><td><code>p5-report-overreach</code></td><td><code>query</code></td><td>a-100</td><td>client-user</td><td><span class="critical">HARD hold (no human reached)</span></td><td><code>hold</code></td></tr>
+        <tr><td><code>p6-place-hazardous</code></td><td><code>place</code></td><td>a-hz1</td><td>staffing-coordinator</td><td><span class="warn">escalated &rarr; approved</span></td><td><code>commit</code></td></tr>
+        <tr><td><code>p7-dispute</code></td><td><code>request</code></td><td>a-100</td><td>dispute-officer</td><td><span class="warn">escalated &rarr; approved</span></td><td><code>commit</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Action gate (StaffingGovernor — eight checks, priority order)</h2>
+    <p class="muted">Checks 1&ndash;5 are HARD: a human approver cannot override them. Checks 6&ndash;8 always escalate to a human, who may approve.</p>
+    <table>
+      <thead><tr><th>#</th><th>Check</th><th>Kind</th><th>What it enforces</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>rbac</code></td><td><span class="err">HARD</span></td><td>actor-role must be permitted for the op</td></tr>
+        <tr><td>2</td><td><code>eligibility-gate</code></td><td><span class="err">HARD</span></td><td>worker's cited eligibility must resolve to an allowed class (operator-verified class requires a :verification-ref)</td></tr>
+        <tr><td>3</td><td><code>tenure-limit-gate</code></td><td><span class="err">HARD</span></td><td>cumulative assignment duration at this client must stay within the jurisdiction's statutory cap</td></tr>
+        <tr><td>4</td><td><code>wage-compliance-gate</code></td><td><span class="err">HARD</span></td><td>timesheet's effective hourly rate must meet the jurisdiction's operator-maintained wage floor</td></tr>
+        <tr><td>5</td><td><code>licensed-disclosure</code></td><td><span class="err">HARD</span></td><td>report columns must stay within the client's active contract tier</td></tr>
+        <tr><td>6</td><td>confidence floor</td><td><span class="warn">escalate</span></td><td>LLM confidence below threshold (0.6) routes to human review</td></tr>
+        <tr><td>7</td><td>high-risk-assignment gate</td><td><span class="warn">escalate</span></td><td>hazardous-duty placements always require human approval</td></tr>
+        <tr><td>8</td><td>dispute requests</td><td><span class="warn">escalate</span></td><td>a worker/client dispute never auto-resolves, at any confidence or phase</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Audit ledger (this run)</h2>
+    <p class="muted">Append-only decision-fact log — every proposal this scenario committed or held, and on what eligibility/tenure/wage/disclosure basis.</p>
+    <table>
+      <thead><tr><th>Fact</th><th>Op</th><th>Subject</th><th>Basis</th></tr></thead>
+      <tbody>
+        <tr><td>committed</td><td><code>place</code></td><td>a-usa1</td><td>worker-id, client-id, role, start-date, end-date</td></tr>
+        <tr><td>policy-hold</td><td><code>place</code></td><td>a-bad1</td><td>eligibility-gate</td></tr>
+        <tr><td>policy-hold</td><td><code>extend</code></td><td>a-100</td><td>tenure-limit-gate</td></tr>
+        <tr><td>policy-hold</td><td><code>approve</code></td><td>a-100</td><td>wage-compliance-gate</td></tr>
+        <tr><td>policy-hold</td><td><code>query</code></td><td>a-100</td><td>licensed-disclosure</td></tr>
+        <tr><td>committed</td><td><code>place</code></td><td>a-hz1</td><td>worker-id, client-id, role, start-date, end-date</td></tr>
+        <tr><td>committed</td><td><code>request</code></td><td>a-100</td><td>hours</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body></html>
