@@ -38,7 +38,8 @@
 (deftest tenure-cap-months-are-real-and-small
   (is (= 36 (:jpn facts/tenure-cap-months)))
   (is (= 18 (:deu facts/tenure-cap-months)))
-  (is (= 3 (:gbr facts/tenure-cap-months))))
+  (is (= 3 (:gbr facts/tenure-cap-months)))
+  (is (= 18 (:fra facts/tenure-cap-months))))
 
 (deftest coverage-is-honest-not-aspirational
   (let [c (facts/coverage)]
