@@ -24,7 +24,20 @@
 
   Adding coverage means adding a real, citable statutory entry — never
   fabricating one, and never asserting a specific current dollar/yen/euro
-  wage figure as if it were verified law.")
+  wage figure as if it were verified law.
+
+  Citation verified 2026-07-22: FRA's tenure-cap required investigating,
+  rather than assuming, which article actually sets the numeric cap today.
+  Code du travail Art. L1251-12 (post-2018 'Ordonnances Macron' reform) no
+  longer states a fixed duration itself -- it now only lets an extended
+  branch-level collective agreement set the mission's total duration.
+  The fixed 18-month default is instead in Art. L1251-12-1, which applies
+  'à défaut de stipulation dans la convention ou l'accord de branche' (i.e.
+  only as a FALLBACK when no branch agreement overrides it) -- confirmed by
+  directly reading both articles on legifrance.gouv.fr. Citing L1251-12-1
+  (the actual operative default), not L1251-12 (which a naive search would
+  surface first but which no longer carries the number), avoids citing a
+  superseded reading of the law. HIGH confidence.")
 
 (def catalog
   "Each entry: {:id :jurisdiction :class :covers :basis :access}. `:class`
@@ -56,6 +69,10 @@
     :jurisdiction :gbr :class :awr-qualifying-period :covers #{:tenure-cap}
     :basis "Agency Workers Regulations 2010, reg. 5 — 12-week qualifying period before equal-treatment entitlement attaches"
     :access :statute}
+   {:id :fra-code-travail-tenure-cap
+    :jurisdiction :fra :class :fra-mission-tenure-cap :covers #{:tenure-cap}
+    :basis "Code du travail Art. L1251-12-1 — https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000035638866 — 18-month default maximum duration of a contrat de mission (including renewals), applying only where no extended branch-level collective agreement under Art. L1251-12 sets a different duration"
+    :access :statute}
    {:id :operator-verified-eligibility
     :jurisdiction nil :class :operator-verified-eligibility :covers #{:eligibility}
     :basis "operator-attested verification performed under the operator's own jurisdiction law (structural class, not a specific statute)"
@@ -75,7 +92,7 @@
   point, but this actor still treats crossing it as HARD — extending past
   it without adjusting terms to equal treatment is exactly the kind of
   proposal MarketData-LLM-style advisors must not be trusted to self-police."
-  {:jpn 36 :deu 18 :gbr 3})
+  {:jpn 36 :deu 18 :gbr 3 :fra 18})
 
 (defn class-allowed? [source-class]
   (contains? allowed-eligibility-classes source-class))
@@ -92,8 +109,9 @@
   {:source-count (count catalog)
    :tenure-cap-jurisdictions (into (sorted-set) (keys tenure-cap-months))
    :wage-basis-jurisdictions (into (sorted-set) (map :jurisdiction (filter #(contains? (:covers %) :wage-compliance) catalog)))
-   :note (str "R0 scope: 3 real tenure-cap statutes (JPN 労働者派遣法 3yr, "
-              "DEU AÜG 18mo, GBR AWR 2010 12wk qualifying period), 2 real "
+   :note (str "R0 scope: 4 real tenure-cap statutes (JPN 労働者派遣法 3yr, "
+              "DEU AÜG 18mo, GBR AWR 2010 12wk qualifying period, FRA Code "
+              "du travail Art. L1251-12-1 18mo default), 2 real "
               "wage-compliance statutory bases (USA FLSA, JPN 最低賃金法) -- "
               "actual numeric wage floors are operator-maintained data, "
               "never hardcoded here -- 1 real eligibility form (USA I-9), "
