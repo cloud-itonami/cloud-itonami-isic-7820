@@ -37,7 +37,39 @@
   directly reading both articles on legifrance.gouv.fr. Citing L1251-12-1
   (the actual operative default), not L1251-12 (which a naive search would
   surface first but which no longer carries the number), avoids citing a
-  superseded reading of the law. HIGH confidence.")
+  superseded reading of the law. HIGH confidence.
+
+  Citation verified 2026-07-22: KOR's tenure-cap was fetched directly from
+  the government source rather than taken on faith from a secondary
+  summary. law.go.kr's own English-language search UI (elaw.klri.re.kr)
+  repeatedly 500'd on every query tried (POST to lawTotalSearch.do with the
+  documented form fields, with and without a session cookie), so the
+  primary law.go.kr Open API
+  (`https://www.law.go.kr/DRF/lawService.do?OC=test&target=law&MST=286257&type=XML`)
+  was used instead. `OC=test` is a commonly-used anonymous test id for
+  this API (empirically confirmed here: it returns HTTP 200 with genuine,
+  internally-consistent statutory XML matching the real article/paragraph
+  structure, reproduced byte-for-byte on a second independent fetch) --
+  no registration key was fabricated or guessed, but open.law.go.kr's own
+  API guide page renders as a client-side-JS shell with no readable
+  documentation text in the raw HTML, so `OC=test`'s status as an
+  officially-*written*-down convention (vs. merely an id that happens to
+  be accepted) could not be independently confirmed from that guide page
+  and is NOT asserted as such. It returned the full current consolidated
+  text of 파견근로자 보호 등에 관한
+  법률 (Act on the Protection of Dispatched Workers), 공포번호 21701,
+  공포일자/시행일자 2026-05-26 (i.e. the version in force today), MST
+  286257. Article 6 (파견기간, 'dispatch period') was read in full: ①
+  caps ordinary dispatch (into the Art.5① permitted-occupation list) at 1
+  year; ② allows a single extension by agreement of the dispatching
+  business owner / using business owner / worker, capped so the *total*
+  dispatch period including the extension does not exceed 2 years (24
+  months); ③ carves out an exception letting the 2-year cap be exceeded
+  for elderly workers; ④ sets a separate, shorter regime (period
+  necessary, or ≤3 months extendable once) for the different
+  temporary-vacancy/intermittent-need dispatch permitted under Art.5②
+  -- confirmed by reading Art.5 alongside Art.6 so the cap is not
+  overclaimed as universal. HIGH confidence.")
 
 (def catalog
   "Each entry: {:id :jurisdiction :class :covers :basis :access}. `:class`
@@ -73,6 +105,10 @@
     :jurisdiction :fra :class :fra-mission-tenure-cap :covers #{:tenure-cap}
     :basis "Code du travail Art. L1251-12-1 — https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000035638866 — 18-month default maximum duration of a contrat de mission (including renewals), applying only where no extended branch-level collective agreement under Art. L1251-12 sets a different duration"
     :access :statute}
+   {:id :kor-pagyeon-tenure-cap
+    :jurisdiction :kor :class :kor-dispatch-tenure-cap :covers #{:tenure-cap}
+    :basis "파견근로자 보호 등에 관한 법률(Act on the Protection of Dispatched Workers) 제6조(Art. 6) — https://www.law.go.kr/DRF/lawService.do?OC=test&target=law&MST=286257&type=HTML — 1-year default dispatch period (①), extendable once by agreement of the dispatching business owner/using business owner/worker so the total dispatch period including the extension does not exceed 2 years / 24 months (②); applies to dispatch into the Art. 5① permitted-occupation list, not to the separate shorter temporary-vacancy/intermittent-need dispatch permitted under Art. 5②/Art. 6④"
+    :access :statute}
    {:id :operator-verified-eligibility
     :jurisdiction nil :class :operator-verified-eligibility :covers #{:eligibility}
     :basis "operator-attested verification performed under the operator's own jurisdiction law (structural class, not a specific statute)"
@@ -91,8 +127,13 @@
   period trigger (equal treatment attaches), not an absolute ban past that
   point, but this actor still treats crossing it as HARD — extending past
   it without adjusting terms to equal treatment is exactly the kind of
-  proposal MarketData-LLM-style advisors must not be trusted to self-police."
-  {:jpn 36 :deu 18 :gbr 3 :fra 18})
+  proposal MarketData-LLM-style advisors must not be trusted to self-police.
+  `:kor`'s 24 months is the *total* cap including the one allowed
+  extension (Art. 6①②) for dispatch into the permitted-occupation list —
+  it does NOT apply to the separate, shorter temporary-vacancy dispatch
+  permitted under Art. 5②/Art. 6④, which this catalog does not encode as
+  a single number since its duration is need-dependent, not fixed."
+  {:jpn 36 :deu 18 :gbr 3 :fra 18 :kor 24})
 
 (defn class-allowed? [source-class]
   (contains? allowed-eligibility-classes source-class))
@@ -102,16 +143,17 @@
 
 (defn coverage
   "Honest, machine-checkable report of what R0 actually covers — never
-  overstate ('全法域の派遣期間規制' in prose, 3 real tenure-cap statutes + 2
+  overstate ('全法域の派遣期間規制' in prose, 5 real tenure-cap statutes + 2
   real wage-compliance statutes + 1 real eligibility form + 1 structural
   operator-attested class, in fact)."
   []
   {:source-count (count catalog)
    :tenure-cap-jurisdictions (into (sorted-set) (keys tenure-cap-months))
    :wage-basis-jurisdictions (into (sorted-set) (map :jurisdiction (filter #(contains? (:covers %) :wage-compliance) catalog)))
-   :note (str "R0 scope: 4 real tenure-cap statutes (JPN 労働者派遣法 3yr, "
+   :note (str "R0 scope: 5 real tenure-cap statutes (JPN 労働者派遣法 3yr, "
               "DEU AÜG 18mo, GBR AWR 2010 12wk qualifying period, FRA Code "
-              "du travail Art. L1251-12-1 18mo default), 2 real "
+              "du travail Art. L1251-12-1 18mo default, KOR 파견법 Art.6 "
+              "1yr default/2yr total cap), 2 real "
               "wage-compliance statutory bases (USA FLSA, JPN 最低賃金法) -- "
               "actual numeric wage floors are operator-maintained data, "
               "never hardcoded here -- 1 real eligibility form (USA I-9), "
