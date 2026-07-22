@@ -43,11 +43,20 @@
   the government source rather than taken on faith from a secondary
   summary. law.go.kr's own English-language search UI (elaw.klri.re.kr)
   repeatedly 500'd on every query tried (POST to lawTotalSearch.do with the
-  documented form fields), so the primary law.go.kr Open API
-  (`https://www.law.go.kr/DRF/lawService.do?OC=test&target=law&MST=286257&type=XML`,
-  `OC=test` is law.go.kr's own published anonymous-access sample id, no
-  registration key was fabricated or guessed) was used instead -- it
-  returned the full current consolidated text of 파견근로자 보호 등에 관한
+  documented form fields, with and without a session cookie), so the
+  primary law.go.kr Open API
+  (`https://www.law.go.kr/DRF/lawService.do?OC=test&target=law&MST=286257&type=XML`)
+  was used instead. `OC=test` is a commonly-used anonymous test id for
+  this API (empirically confirmed here: it returns HTTP 200 with genuine,
+  internally-consistent statutory XML matching the real article/paragraph
+  structure, reproduced byte-for-byte on a second independent fetch) --
+  no registration key was fabricated or guessed, but open.law.go.kr's own
+  API guide page renders as a client-side-JS shell with no readable
+  documentation text in the raw HTML, so `OC=test`'s status as an
+  officially-*written*-down convention (vs. merely an id that happens to
+  be accepted) could not be independently confirmed from that guide page
+  and is NOT asserted as such. It returned the full current consolidated
+  text of 파견근로자 보호 등에 관한
   법률 (Act on the Protection of Dispatched Workers), 공포번호 21701,
   공포일자/시행일자 2026-05-26 (i.e. the version in force today), MST
   286257. Article 6 (파견기간, 'dispatch period') was read in full: ①
