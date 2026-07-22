@@ -39,11 +39,31 @@
   (is (= 36 (:jpn facts/tenure-cap-months)))
   (is (= 18 (:deu facts/tenure-cap-months)))
   (is (= 3 (:gbr facts/tenure-cap-months)))
-  (is (= 18 (:fra facts/tenure-cap-months))))
+  (is (= 18 (:fra facts/tenure-cap-months)))
+  (is (= 24 (:kor facts/tenure-cap-months))))
+
+(deftest kor-dispatch-tenure-cap-is-cataloged
+  (testing (str "파견근로자 보호 등에 관한 법률(Act on the Protection of "
+                "Dispatched Workers) Art. 6 -- 1yr default, 2yr (24mo) total "
+                "cap including the one allowed extension, verified directly "
+                "against law.go.kr's Open API (MST=286257) rather than a "
+                "secondary summary")
+    (let [entry (first (filter #(= :kor-pagyeon-tenure-cap (:id %)) facts/catalog))]
+      (is (some? entry) "KOR catalog entry must exist")
+      (is (= :kor (:jurisdiction entry)))
+      (is (= :kor-dispatch-tenure-cap (:class entry)))
+      (is (contains? (:covers entry) :tenure-cap))
+      (is (= :statute (:access entry)))
+      (is (re-find #"제6조|Art\. 6" (:basis entry)))
+      (is (re-find #"law\.go\.kr" (:basis entry))
+          "basis should cite the actual government source fetched, not a paraphrase"))
+    (is (contains? facts/tenure-cap-months :kor))
+    (is (= 24 (:kor facts/tenure-cap-months)))))
 
 (deftest coverage-is-honest-not-aspirational
   (let [c (facts/coverage)]
     (is (= (count facts/catalog) (:source-count c)))
     (is (<= (:source-count c) 20) "R0 catalog should stay small and citable, not bulk-padded")
     (is (contains? (:tenure-cap-jurisdictions c) :jpn))
+    (is (contains? (:tenure-cap-jurisdictions c) :kor))
     (is (not (contains? (:tenure-cap-jurisdictions c) :usa)))))
