@@ -1,0 +1,24 @@
+{:itonami.blueprint/id "cloud-itonami-isic-7820"
+ :itonami.blueprint/name "Temporary employment agency activities — statutory-compliant dispatch staffing"
+ :itonami.blueprint/isic-rev4 "7820"
+ :itonami.blueprint/domain :labor/temporary-staffing
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:worker-protection :wage-floor-compliance :tenure-cap-compliance]
+ :itonami.blueprint/governor :staffing-governor
+ :itonami.blueprint/robotics false
+ :itonami.blueprint/required-technologies [:identity :audit-ledger]
+ :itonami.blueprint/status :public-oss
+ :itonami.blueprint/maturity :implemented
+ :itonami.blueprint/implemented-slice
+ "TempStaffing-LLM ⊣ StaffingGovernor (staffing.policy, eight checks: rbac ·
+  eligibility-gate · tenure-limit-gate (jurisdiction statutory
+  cumulative-assignment-duration cap, this actor's domain-unique HARD
+  check) · wage-compliance-gate (jurisdiction wage-floor vs. approved
+  timesheet's effective hourly rate) · licensed-disclosure ·
+  confidence-floor · high-risk-assignment-gate · dispute-requests-never-
+  auto-resolve), langgraph StateGraph (staffing.operation), append-only
+  audit ledger (staffing.store/ledger + append-ledger!). A phase 0→3
+  staged-autonomy gate (staffing.phase) sits on top of the governor and
+  can only narrow, never widen, what the governor already allowed. 42
+  tests / 190 assertions green (`clojure -M:dev:test`), demo runnable
+  end-to-end (`clojure -M:dev:run`)."}
