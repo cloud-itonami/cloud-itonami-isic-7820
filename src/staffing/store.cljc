@@ -29,10 +29,9 @@
   The ledger stays append-only on every backend — 'who placed/extended/
   approved what, on what eligibility/tenure/wage basis' is always a query
   over an immutable log."
-  (:require #?(:clj  [clojure.edn :as edn]
-               :cljs [cljs.reader :as edn])
-            [clojure.string :as str]
-            [langchain.db :as d]))
+  (:require [clojure.string :as str]
+            [langchain.db :as d]
+            [langchain-store.core :as ls]))
 
 (defprotocol Store
   (worker [s id])
@@ -146,17 +145,14 @@
    :contract/tenant {:db/unique :db.unique/identity}
    :ledger/seq     {:db/unique :db.unique/identity}})
 
-(defn- enc [v] (pr-str v))
-(defn- dec* [s] (when s (edn/read-string s)))
-
 (defn- worker->tx [{:keys [id name eligibility]}]
   (cond-> {:worker/id id}
     name        (assoc :worker/name name)
-    true        (assoc :worker/eligibility (enc eligibility))))
+    true        (assoc :worker/eligibility (ls/enc eligibility))))
 
 (defn- pull->worker [m]
   (when (:worker/id m)
-    {:id (:worker/id m) :name (:worker/name m) :eligibility (dec* (:worker/eligibility m))}))
+    {:id (:worker/id m) :name (:worker/name m) :eligibility (ls/dec* (:worker/eligibility m))}))
 
 (def ^:private worker-pull [:worker/id :worker/name :worker/eligibility])
 
@@ -174,14 +170,14 @@
 (defn- assignment->tx [{:keys [id worker-id client-id jurisdiction role pay-rate start-date end-date hazardous-duty? status]}]
   {:assignment/id id :assignment/worker-id worker-id :assignment/client-id client-id
    :assignment/jurisdiction jurisdiction :assignment/role role
-   :assignment/pay-rate (enc pay-rate) :assignment/start-date start-date :assignment/end-date end-date
+   :assignment/pay-rate (ls/enc pay-rate) :assignment/start-date start-date :assignment/end-date end-date
    :assignment/hazardous (boolean hazardous-duty?) :assignment/status status})
 
 (defn- pull->assignment [m]
   (when (:assignment/id m)
     {:id (:assignment/id m) :worker-id (:assignment/worker-id m) :client-id (:assignment/client-id m)
      :jurisdiction (:assignment/jurisdiction m) :role (:assignment/role m)
-     :pay-rate (dec* (:assignment/pay-rate m)) :start-date (:assignment/start-date m)
+     :pay-rate (ls/dec* (:assignment/pay-rate m)) :start-date (:assignment/start-date m)
      :end-date (:assignment/end-date m) :hazardous-duty? (:assignment/hazardous m)
      :status (:assignment/status m)}))
 
@@ -192,27 +188,27 @@
 
 (defn- timesheet->tx [{:keys [id assignment-id period hours overtime-hours approved-amount status]}]
   {:timesheet/id id :timesheet/assignment-id assignment-id :timesheet/period period
-   :timesheet/hours (enc hours) :timesheet/overtime-hours (enc overtime-hours)
-   :timesheet/approved-amount (enc approved-amount) :timesheet/status status})
+   :timesheet/hours (ls/enc hours) :timesheet/overtime-hours (ls/enc overtime-hours)
+   :timesheet/approved-amount (ls/enc approved-amount) :timesheet/status status})
 
 (defn- pull->timesheet [m]
   (when (:timesheet/id m)
     {:id (:timesheet/id m) :assignment-id (:timesheet/assignment-id m) :period (:timesheet/period m)
-     :hours (dec* (:timesheet/hours m)) :overtime-hours (dec* (:timesheet/overtime-hours m))
-     :approved-amount (dec* (:timesheet/approved-amount m)) :status (:timesheet/status m)}))
+     :hours (ls/dec* (:timesheet/hours m)) :overtime-hours (ls/dec* (:timesheet/overtime-hours m))
+     :approved-amount (ls/dec* (:timesheet/approved-amount m)) :status (:timesheet/status m)}))
 
 (def ^:private timesheet-pull
   [:timesheet/id :timesheet/assignment-id :timesheet/period :timesheet/hours
    :timesheet/overtime-hours :timesheet/approved-amount :timesheet/status])
 
 (defn- wage-floor->tx [{:keys [jurisdiction hourly-min currency source]}]
-  {:wage-floor/jurisdiction jurisdiction :wage-floor/hourly-min (enc hourly-min)
-   :wage-floor/currency currency :wage-floor/source (enc source)})
+  {:wage-floor/jurisdiction jurisdiction :wage-floor/hourly-min (ls/enc hourly-min)
+   :wage-floor/currency currency :wage-floor/source (ls/enc source)})
 
 (defn- pull->wage-floor [m]
   (when (:wage-floor/jurisdiction m)
-    {:jurisdiction (:wage-floor/jurisdiction m) :hourly-min (dec* (:wage-floor/hourly-min m))
-     :currency (:wage-floor/currency m) :source (dec* (:wage-floor/source m))}))
+    {:jurisdiction (:wage-floor/jurisdiction m) :hourly-min (ls/dec* (:wage-floor/hourly-min m))
+     :currency (:wage-floor/currency m) :source (ls/dec* (:wage-floor/source m))}))
 
 (def ^:private wage-floor-pull
   [:wage-floor/jurisdiction :wage-floor/hourly-min :wage-floor/currency :wage-floor/source])
@@ -252,7 +248,7 @@
   (ledger [_]
     (->> (d/q '[:find ?s ?f :where [?e :ledger/seq ?s] [?e :ledger/fact ?f]] (d/db conn))
          (sort-by first)
-         (mapv (comp dec* second))))
+         (mapv (comp ls/dec* second))))
   (commit-record! [s {:keys [effect path value]}]
     (case effect
       :assignment-upsert (d/transact! conn [(assignment->tx value)])
@@ -262,7 +258,7 @@
       nil)
     s)
   (append-ledger! [s fact]
-    (d/transact! conn [{:ledger/seq (count (ledger s)) :ledger/fact (enc fact)}])
+    (d/transact! conn [{:ledger/seq (count (ledger s)) :ledger/fact (ls/enc fact)}])
     fact)
   (with-workers [s ws]
     (when (seq ws) (d/transact! conn (mapv worker->tx (vals ws)))) s)
