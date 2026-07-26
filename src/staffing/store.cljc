@@ -14,7 +14,9 @@
   StaffingGovernor and the audit ledger never know which SSoT they run on.
 
   Entity shapes (ADR-2607111600): a worker (the agency's employer-of-record
-  employee), a client (the host company the worker is dispatched to), an
+  employee), a CANDIDATE (someone being considered for employment, not yet
+  employed — see below), a client (the host company the worker is
+  dispatched to), an
   assignment (worker×client, role, pay-rate, jurisdiction, start/end date —
   the unit the tenure-limit-gate polices), a timesheet (assignment×period,
   hours worked, wage-compliance-gate target), a wage-floor (operator-
@@ -25,6 +27,30 @@
   execution — this actor proposes/approves hours and amounts, it never
   moves money (ADR-2607111600 §1, the same structural exclusion as
   `cloud-itonami-isic-6311`'s market-data actor never trading).
+
+  A candidate is `{:id :handle :provenance :claimed-skills :available-from
+  :location-scope :contact-ref :status}` in its OWN container, never in
+  `:workers`. Three consequences, all structural:
+
+    1. `worker`/`assignments-of-worker` cannot return someone who was never
+       hired, so a placement aimed at a candidate is rejected outright
+       (`staffing.policy`'s unknown-worker gate) rather than depending on a
+       status filter every caller must remember.
+    2. A candidate carries NO personal identifiers: a self-chosen
+       `:handle`, an opaque `:contact-ref` pointing at the conversation
+       that already exists (e.g. a GitHub issue), and what they say they
+       can do. The employee's legal `:name` and eligibility citation enter
+       only on `:candidate-hire`, which no phase can auto-commit — a human
+       enters them at sign-off. There is still no field anywhere for a bank
+       account or tax id (ADR-2607111600 §1: this actor never moves money).
+    3. `:provenance` records HOW the candidate arrived — a direct
+       application, or a human-carried referral draft from a sibling actor
+       (`{:kind :referral-draft :from-actor \"cloud-itonami-isco-7126\"
+       :draft-id \"...\"}`), which is the seam ADR-2607131000 /
+       ADR-2607202600 define. It is a claim about provenance recorded on
+       THIS side of the seam; this actor never calls the other actor to
+       confirm the draft exists, because that cross-actor invocation is
+       exactly what those ADRs forbid.
 
   The ledger stays append-only on every backend — 'who placed/extended/
   approved what, on what eligibility/tenure/wage basis' is always a query
@@ -41,6 +67,8 @@
   (timesheet [s id])
   (timesheets-of-assignment [s assignment-id] "all timesheets for this assignment")
   (wage-floor [s jurisdiction])
+  (candidate [s id] "someone being considered for employment here — NEVER an employed worker (see ns docstring)")
+  (all-candidates [s])
   (contract [s tenant])
   (ledger [s])
   (commit-record! [s record] "apply a committed op's record to the SSoT")
@@ -50,6 +78,7 @@
   (with-assignments [s assignments] "replace/seed assignments (map id→assignment)")
   (with-timesheets [s timesheets]   "replace/seed timesheets (map id→timesheet)")
   (with-wage-floors [s floors]      "replace/seed wage floors (map jurisdiction→floor)")
+  (with-candidates [s candidates]   "replace/seed hiring candidates (map id→candidate)")
   (with-contracts [s contracts]     "replace/seed client billing contracts (map tenant→contract)"))
 
 ;; ───────────────────────── demo data (fictitious, non-real people) ─────
@@ -92,6 +121,20 @@
           :source {:class :aug-tenure-cap :ref "demo-operator-maintained-rate-table"}}
     :usa {:jurisdiction :usa :hourly-min 7.25M :currency :usd
           :source {:class :flsa-wage-basis :ref "demo-operator-maintained-rate-table"}}}
+   ;; One pending candidate, arrived as a human-carried referral draft from
+   ;; an isco actor whose robot could not do the on-site work itself
+   ;; (ADR-2607202600's on-site-recurring routing branch). No legal name,
+   ;; no contact detail -- a handle and a pointer to the public thread.
+   :candidates
+   {"cd-100" {:id "cd-100" :handle "haruki (demo)"
+              :provenance {:kind :referral-draft
+                           :from-actor "cloud-itonami-isco-7126"
+                           :draft-id "draft-demo-0001"}
+              :claimed-skills #{:on-site-install :equipment-teardown}
+              :available-from "2026-08-01"
+              :location-scope :per-engagement
+              :contact-ref "gh-issue:cloud-itonami/cloud-itonami-isic-6399#0"
+              :status :candidate}}
    :contracts
    {"tenant-c100" {:tenant "tenant-c100" :tier :tier/basic :active? true :purpose :billing-review}
     "tenant-c200" {:tenant "tenant-c200" :tier :tier/detailed :active? true :purpose :billing-review}}})
@@ -109,12 +152,24 @@
   (timesheets-of-assignment [_ assignment-id]
     (->> (vals (:timesheets @a)) (filter #(= assignment-id (:assignment-id %))) (sort-by :id)))
   (wage-floor [_ jurisdiction] (get-in @a [:wage-floors jurisdiction]))
+  (candidate [_ id] (get-in @a [:candidates id]))
+  (all-candidates [_] (sort-by :id (vals (:candidates @a))))
   (contract [_ tenant] (get-in @a [:contracts tenant]))
   (ledger [_] (:ledger @a))
   (commit-record! [s {:keys [effect path value]}]
     (case effect
       :assignment-upsert (swap! a assoc-in [:assignments (:id value)] value)
       :timesheet-upsert   (swap! a assoc-in [:timesheets (:id value)] value)
+      :candidate-upsert   (swap! a update-in [:candidates (:id value)] merge value)
+      ;; Hiring is the only path into :workers. The candidate record is
+      ;; kept (marked :hired) so 'who was hired/declined, on whose
+      ;; sign-off, on what eligibility basis' stays a ledger query.
+      :candidate-hire     (let [{:keys [candidate-id name eligibility]} value]
+                            (swap! a assoc-in [:candidates candidate-id :status] :hired)
+                            (swap! a assoc-in [:workers candidate-id]
+                                   {:id candidate-id :name name :eligibility eligibility}))
+      :candidate-decline  (swap! a update-in [:candidates (:candidate-id value)]
+                                 merge {:status :declined :decline-reason (:reason value)})
       :dispute-apply      (swap! a update-in [:assignments (first path)] merge (:patch value))
       nil)
     s)
@@ -124,12 +179,13 @@
   (with-assignments [s as] (when (seq as) (swap! a assoc :assignments as)) s)
   (with-timesheets [s ts]  (when (seq ts) (swap! a assoc :timesheets ts)) s)
   (with-wage-floors [s wf] (when (seq wf) (swap! a assoc :wage-floors wf)) s)
+  (with-candidates [s cs]  (when (seq cs) (swap! a assoc :candidates cs)) s)
   (with-contracts [s cts]  (when (seq cts) (swap! a assoc :contracts cts)) s))
 
 (defn seed-db
   "A MemStore seeded with the demo data. The deterministic default."
   []
-  (->MemStore (atom (assoc (demo-data) :ledger []))))
+  (->MemStore (atom (merge {:candidates {} :ledger []} (demo-data)))))
 
 ;; ───────────────────────── DatomicStore (langchain.db) ─────────────────
 
@@ -142,6 +198,7 @@
    :assignment/id  {:db/unique :db.unique/identity}
    :timesheet/id   {:db/unique :db.unique/identity}
    :wage-floor/jurisdiction {:db/unique :db.unique/identity}
+   :candidate/id   {:db/unique :db.unique/identity}
    :contract/tenant {:db/unique :db.unique/identity}
    :ledger/seq     {:db/unique :db.unique/identity}})
 
@@ -213,6 +270,36 @@
 (def ^:private wage-floor-pull
   [:wage-floor/jurisdiction :wage-floor/hourly-min :wage-floor/currency :wage-floor/source])
 
+(defn- candidate->tx [{:keys [id handle provenance claimed-skills available-from
+                             location-scope contact-ref status decline-reason]}]
+  (cond-> {:candidate/id id}
+    handle          (assoc :candidate/handle handle)
+    true            (assoc :candidate/provenance (ls/enc provenance))
+    true            (assoc :candidate/claimed-skills (ls/enc (or claimed-skills #{})))
+    available-from  (assoc :candidate/available-from available-from)
+    location-scope  (assoc :candidate/location-scope location-scope)
+    ;; opaque pointer, not a contact detail -- encrypted at rest all the
+    ;; same, the same treatment eligibility citations get.
+    contact-ref     (assoc :candidate/contact-ref (ls/enc contact-ref))
+    status          (assoc :candidate/status status)
+    decline-reason  (assoc :candidate/decline-reason decline-reason)))
+
+(defn- pull->candidate [m]
+  (when (:candidate/id m)
+    {:id (:candidate/id m) :handle (:candidate/handle m)
+     :provenance (ls/dec* (:candidate/provenance m))
+     :claimed-skills (or (ls/dec* (:candidate/claimed-skills m)) #{})
+     :available-from (:candidate/available-from m)
+     :location-scope (:candidate/location-scope m)
+     :contact-ref (ls/dec* (:candidate/contact-ref m))
+     :status (:candidate/status m)
+     :decline-reason (:candidate/decline-reason m)}))
+
+(def ^:private candidate-pull
+  [:candidate/id :candidate/handle :candidate/provenance :candidate/claimed-skills
+   :candidate/available-from :candidate/location-scope :candidate/contact-ref
+   :candidate/status :candidate/decline-reason])
+
 (defn- contract->tx [{:keys [tenant tier active? purpose]}]
   {:contract/tenant tenant :contract/tier tier :contract/active active? :contract/purpose purpose})
 
@@ -244,6 +331,11 @@
          (sort-by :id)))
   (wage-floor [_ jurisdiction]
     (pull->wage-floor (d/pull (d/db conn) wage-floor-pull [:wage-floor/jurisdiction jurisdiction])))
+  (candidate [_ id] (pull->candidate (d/pull (d/db conn) candidate-pull [:candidate/id id])))
+  (all-candidates [_]
+    (->> (d/q '[:find [?id ...] :where [?e :candidate/id ?id]] (d/db conn))
+         (map #(pull->candidate (d/pull (d/db conn) candidate-pull [:candidate/id %])))
+         (sort-by :id)))
   (contract [_ tenant] (pull->contract (d/pull (d/db conn) contract-pull [:contract/tenant tenant])))
   (ledger [_]
     (->> (d/q '[:find ?s ?f :where [?e :ledger/seq ?s] [?e :ledger/fact ?f]] (d/db conn))
@@ -253,6 +345,15 @@
     (case effect
       :assignment-upsert (d/transact! conn [(assignment->tx value)])
       :timesheet-upsert   (d/transact! conn [(timesheet->tx value)])
+      :candidate-upsert   (d/transact! conn [(candidate->tx value)])
+      :candidate-hire     (let [{:keys [candidate-id name eligibility]} value
+                                c (candidate s candidate-id)]
+                            (d/transact! conn [(candidate->tx (assoc c :status :hired))
+                                               (worker->tx {:id candidate-id :name name
+                                                            :eligibility eligibility})]))
+      :candidate-decline  (let [c (candidate s (:candidate-id value))]
+                            (d/transact! conn [(candidate->tx (merge c {:status :declined
+                                                                        :decline-reason (:reason value)}))]))
       :dispute-apply
       (d/transact! conn [(assignment->tx (merge (assignment s (first path)) (:patch value)))])
       nil)
@@ -270,6 +371,8 @@
     (when (seq ts) (d/transact! conn (mapv timesheet->tx (vals ts)))) s)
   (with-wage-floors [s wf]
     (when (seq wf) (d/transact! conn (mapv wage-floor->tx (vals wf)))) s)
+  (with-candidates [s cs]
+    (when (seq cs) (d/transact! conn (mapv candidate->tx (vals cs)))) s)
   (with-contracts [s cts]
     (when (seq cts) (d/transact! conn (mapv contract->tx (vals cts)))) s))
 
@@ -277,11 +380,12 @@
   "A DatomicStore (langchain.db backend) seeded from `data`; empty when
   omitted."
   ([] (datomic-store {}))
-  ([{:keys [workers clients assignments timesheets wage-floors contracts]}]
+  ([{:keys [workers clients assignments timesheets wage-floors candidates contracts]}]
    (let [s (->DatomicStore (d/create-conn schema))]
      (-> s (with-workers workers) (with-clients clients)
          (with-assignments assignments) (with-timesheets timesheets)
-         (with-wage-floors wage-floors) (with-contracts contracts)))))
+         (with-wage-floors wage-floors) (with-candidates candidates)
+         (with-contracts contracts)))))
 
 (defn datomic-seed-db
   "A DatomicStore seeded with the demo data — the Datomic-backed analog of

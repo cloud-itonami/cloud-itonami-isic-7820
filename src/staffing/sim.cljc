@@ -1,7 +1,8 @@
 (ns staffing.sim
-  "Demo runner: push seven representative operations through one
+  "Demo runner: push eleven representative operations through one
   OperationActor and watch the StaffingGovernor + approval workflow earn
-  the TempStaffing-LLM the right to place, extend, approve or disclose.
+  the TempStaffing-LLM the right to place, extend, approve, disclose, or
+  employ a real person.
 
     op1  クリーンな新規配置(USA、tenure cap 対象外)          → commit(phase 3)
     op2  eligibility 未登録の worker への配置                → eligibility-gate REJECT → hold
@@ -10,6 +11,10 @@
     op5  レポートクエリが tier/basic 契約なのに worker-id/pay-rate まで要求 → licensed-disclosure REJECT → hold
     op6  hazardous-duty 銘柄への配置(出典・cap は正常でも人間承認) → 人間承認へ escalate → approve → commit
     op7  異議申立て(どの phase でも常に人間レビュー)        → escalate → approve → commit
+    op8  isco actor からの referral draft を人が持ち込む(候補者記録) → commit(在籍はしない)
+    op9  出自不明の候補者記録                                → provenance-gate REJECT → hold
+    op10 雇用(phase3・高信頼でも人間が署名。eligibility 再検査) → escalate → approve → commit
+    op11 候補者のまま(未雇用)の人物への配置                   → unknown-worker REJECT → hold
 
   Run: clojure -M:dev:run"
   (:require [langgraph.graph :as g]
@@ -47,7 +52,8 @@
         ;; phase 3 (max autonomy) deliberately, to demonstrate that
         ;; :dispute/request escalates even at the most permissive phase --
         ;; it is never a member of any phase's :auto set.
-        disputer    {:actor-id "do-1" :actor-role :dispute-officer :phase 3}]
+        disputer    {:actor-id "do-1" :actor-role :dispute-officer :phase 3}
+        hiring      {:actor-id "hm-1" :actor-role :hiring-manager :phase 3}]
 
     (line "── R0 statutory カバレッジ(正直な現状) ──")
     (line (pr-str (facts/coverage)))
@@ -99,6 +105,43 @@
 
     (line "\n── 開示(governor が承認した tier/basic 列のみ) ──")
     (line (pr-str (report/render-report db "a-100" [:assignment-id :role :period :hours :approved-amount])))
+
+    (line "\nop8  isco actor からの referral draft を人間が持ち込む(候補者として記録)")
+    (run-op! actor "op8"
+             {:op :candidate/intake :subject "cd-200" :candidate-id "cd-200"
+              :handle "nagi (demo)"
+              :provenance {:kind :referral-draft
+                           :from-actor "cloud-itonami-isco-8332"
+                           :draft-id "draft-demo-0002"}
+              :claimed-skills #{:on-site-install} :available-from "2026-09-01"
+              :location-scope :per-engagement
+              :contact-ref "gh-issue:cloud-itonami/cloud-itonami-isic-6399#0"}
+             coordinator true)
+    (line "   候補者は在籍していない(worker: " (pr-str (store/worker db "cd-200")) ")")
+
+    (line "\nop9  出自(:provenance)を名乗らない候補者記録")
+    (run-op! actor "op9"
+             {:op :candidate/intake :subject "cd-300" :candidate-id "cd-300"
+              :handle "anon (demo)" :provenance nil
+              :claimed-skills #{} :available-from "2026-09-01"
+              :location-scope :per-engagement :contact-ref "gh-issue:example/repo#0"}
+             coordinator true)
+
+    (line "\nop10 雇用 — phase 3・高信頼でも人間が署名し、eligibility を再検査する")
+    (run-op! actor "op10"
+             {:op :worker/hire :subject "cd-100" :candidate-id "cd-100"
+              :name "採用された人(デモ)"
+              :eligibility {:class :operator-verified-eligibility
+                            :ref "jpn-zairyu:demo-cd100" :verification-ref "ver-demo-cd100"}}
+             hiring true)
+    (line "   雇用後の worker: " (pr-str (store/worker db "cd-100")))
+
+    (line "\nop11 まだ候補者のままの人物(cd-200)への配置")
+    (run-op! actor "op11"
+             {:op :assignment/place :subject "a-cd200" :id "a-cd200" :worker-id "cd-200"
+              :client-id "c-300" :jurisdiction :usa :role "picker" :pay-rate 9.00M
+              :start-date "2026-09-01" :end-date "2026-11-01" :hazardous-duty? false}
+             coordinator true)
 
     (line "\n── 監査台帳 (append-only; 誰が・何を・どの eligibility/tenure/wage 基準で行ったか) ──")
     (doseq [f (store/ledger db)]

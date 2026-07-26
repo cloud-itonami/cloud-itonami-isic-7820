@@ -28,22 +28,30 @@
   plus a reason when the phase changed it.")
 
 (def read-ops  #{:report/query})
-(def write-ops #{:assignment/place :assignment/extend :timesheet/approve :dispute/request})
+(def write-ops #{:assignment/place :assignment/extend :timesheet/approve :dispute/request
+                 :candidate/intake :worker/hire :worker/decline})
 
 (def phases
   "phase → {:label .. :writes <ops allowed to write> :auto <ops allowed to
-  auto-commit when governor-clean>}. `:dispute/request` is intentionally
-  absent from every phase's `:auto` set."
+  auto-commit when governor-clean>}. `:dispute/request`, `:worker/hire` and
+  `:worker/decline` are intentionally absent from every phase's `:auto`
+  set. `:candidate/intake` (recording that someone is a candidate, from a
+  direct application or a human-carried referral draft) IS auto-eligible at
+  phase 3, because recording how someone arrived is not a decision about
+  them."
   {0 {:label "read-only"           :writes #{}
                                     :auto #{}}
-   1 {:label "assisted-placement"  :writes #{:assignment/place}
+   1 {:label "assisted-placement"  :writes #{:assignment/place :candidate/intake}
                                     :auto #{}}
    2 {:label "assisted-extend"     :writes #{:assignment/place :assignment/extend
-                                              :timesheet/approve :dispute/request}
+                                              :timesheet/approve :dispute/request
+                                              :candidate/intake :worker/hire :worker/decline}
                                     :auto #{}}
    3 {:label "supervised-auto"     :writes #{:assignment/place :assignment/extend
-                                              :timesheet/approve :dispute/request}
-                                    :auto #{:assignment/place :assignment/extend :timesheet/approve}}})
+                                              :timesheet/approve :dispute/request
+                                              :candidate/intake :worker/hire :worker/decline}
+                                    :auto #{:assignment/place :assignment/extend :timesheet/approve
+                                            :candidate/intake}}})
 
 (def default-phase
   "The phase used when `context` carries no :phase at all

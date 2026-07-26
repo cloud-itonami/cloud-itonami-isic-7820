@@ -86,3 +86,44 @@
       (is (not= :commit (get-in res [:state :disposition]))
           "a clean placement must not auto-commit when :phase is unset")
       (is (nil? (store/assignment s "a-x")) "SSoT untouched without explicit phase"))))
+
+;; ───────────── hiring intake across the phases ─────────────
+
+(def ^:private intake-req
+  {:op :candidate/intake :subject "cd-500" :candidate-id "cd-500"
+   :handle "phase-test-candidate"
+   :provenance {:kind :direct-application}
+   :claimed-skills #{:on-site-install} :available-from "2026-09-01"
+   :location-scope :per-engagement :contact-ref "gh-issue:example/repo#1"})
+
+(def ^:private hire-req
+  {:op :worker/hire :subject "cd-100" :candidate-id "cd-100" :name "採用者(テスト)"
+   :eligibility {:class :operator-verified-eligibility :ref "jpn-zairyu:test"
+                 :verification-ref "ver-test"}})
+
+(def ^:private decline-req
+  {:op :worker/decline :subject "cd-100" :candidate-id "cd-100" :reason :out-of-scope})
+
+(def ^:private hiring-mgr {:actor-id "hm-1" :actor-role :hiring-manager})
+(def ^:private coord {:actor-id "co-1" :actor-role :staffing-coordinator})
+
+(deftest phase0-disables-candidate-intake-phase3-may-auto-record-it
+  (let [[s res] (run 0 intake-req coord)]
+    (is (= :hold (get-in res [:state :disposition])))
+    (is (nil? (store/candidate s "cd-500"))))
+  (let [[s res] (run 3 intake-req coord)]
+    (is (= :commit (get-in res [:state :disposition])))
+    (is (= :candidate (:status (store/candidate s "cd-500"))))
+    (is (nil? (store/worker s "cd-500")) "recording ≠ employing")))
+
+(deftest hire-and-decline-never-auto-commit-at-any-phase
+  (doseq [[label req] [["hire" hire-req] ["decline" decline-req]]]
+    (testing label
+      (doseq [ph [0 1 2 3]]
+        (let [[s res] (run ph req hiring-mgr)]
+          (is (not= :commit (get-in res [:state :disposition]))
+              (str "phase " ph " must not auto-" label))
+          (is (nil? (store/worker s "cd-100"))
+              (str "phase " ph ": nobody is employed without a human"))
+          (is (= :candidate (:status (store/candidate s "cd-100")))
+              (str "phase " ph ": the candidate record stays open")))))))

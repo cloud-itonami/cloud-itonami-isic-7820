@@ -90,16 +90,67 @@ request + injected role/tenant/phase context
 **Single invariant**: TempStaffing-LLM never places, extends, approves, or
 resolves a dispute the StaffingGovernor would reject.
 
+## Where the workers come from (hiring intake)
+
+A dispatch agency needs people before it can dispatch anyone. Until now
+workers could only be seeded, so "the workforce exists" was an assumption.
+Three governed ops close that, and they are also the **receiving end of the
+referral seam** ADR-2607131000 / ADR-2607202600 define — an occupation
+actor (`cloud-itonami-isco-*`) whose robot structurally cannot do a piece
+of on-site work emits a referral draft, a human carries it here, and this
+op records it:
+
+| op | who may run it | what it does |
+|---|---|---|
+| `:candidate/intake` | staffing-coordinator, hiring-manager | records a candidate + **how they arrived** (direct application, or a referral draft naming the origin actor and its draft id). Employs nobody. |
+| `:worker/hire` | hiring-manager only | this agency becomes the employer of record for that person. |
+| `:worker/decline` | hiring-manager only | turns the candidate down, keeping the record. |
+
+Structural, not procedural:
+
+- **A candidate is not dispatchable.** Candidates live in their own
+  container, so `worker`/`assignments-of-worker` cannot return someone who
+  was never hired — a placement aimed at a candidate is a HARD
+  `:unknown-worker` hold.
+- **Employment is always a human's decision.** `:worker/hire` and
+  `:worker/decline` are absent from every phase's `:auto` set and always
+  escalate in the governor, at any confidence — the same treatment
+  `:dispute/request` gets. Becoming someone's employer of record is not a
+  routing optimization.
+- **The eligibility gate runs at hire, not only at dispatch.** The same
+  closed catalog (`staffing.facts`) and the same `:verification-ref`
+  requirement for operator-verified classes apply to the hire itself, and
+  they hold BEFORE a human is asked — an approver cannot wave through a
+  hire with no work-authorization citation.
+- **No applicant personal data.** A candidate carries a self-chosen
+  `:handle` and an opaque `:contact-ref` (a pointer to the public thread).
+  The legal name and eligibility citation enter only at hire, which a human
+  performs. There is still no field anywhere for a bank account or tax id —
+  this actor never moves money (ADR-2607111600 §1).
+- **Provenance is a claim recorded on this side only.** The governor checks
+  that a referral names a fleet actor (`cloud-itonami-isco-NNNN` or one of
+  the named staffing/matching actors) and carries a draft id. It does *not*
+  call that actor to confirm the draft exists — that cross-actor
+  invocation is exactly what ADR-2607131000 forbids. Reconciling both
+  ledgers is an operator's job, by hand, on purpose.
+
+What this does **not** do: execute an employment contract, or pay anyone.
+Hiring here means "this person is now on our books as dispatchable".
+
 ## Run
 
 ```bash
 clojure -M:dev:test   # governor contract · store parity · phases · facts
-clojure -M:dev:run    # 7-operation demo through one OperationActor
+clojure -M:dev:run    # 11-operation demo through one OperationActor
 clojure -M:lint
 ```
 
 ## Non-Negotiables
 
+- Do not make `:worker/hire` or `:worker/decline` auto-committable at any
+  phase, and do not add a confidence threshold that skips the human.
+- Do not add a schema field for applicant personal data (address, phone,
+  email, date of birth, national id) or for a bank account / tax id.
 - Do not commit real worker records, real client contract documents, or
   real eligibility-verification documents.
 - Do not add a schema field for payroll disbursement, bank transfer or tax

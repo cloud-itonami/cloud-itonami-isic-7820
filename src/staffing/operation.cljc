@@ -95,6 +95,7 @@
                         :op (:op request) :subject (:subject request)
                         :reason (or reason
                                     (cond (:dispute? verdict) :worker-client-dispute
+                                          (:hiring? verdict) :employment-decision
                                           (:hazardous? verdict) :hazardous-duty-assignment
                                           :else :low-confidence))
                         :phase ph
