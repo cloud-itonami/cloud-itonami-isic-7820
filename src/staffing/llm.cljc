@@ -117,6 +117,71 @@
    :value     {:patch {disputed-field claim}}
    :confidence 0.5})
 
+;; ───────────────── hiring intake (candidate → worker) ─────────────────
+;; The advisor SHAPES an intake/hire/decline record; it never decides the
+;; employment relationship. `staffing.policy` rejects an unattributed or
+;; shape-invalid provenance, a duplicate/already-resolved candidate, a
+;; missing or non-catalog eligibility citation, and any personal-identifier
+;; or payment field outright -- and routes every hire/decline to a human at
+;; every phase.
+
+(defn- propose-intake
+  "Record that someone is a candidate for employment here, with how they
+  arrived: a direct application, or a human-carried referral draft from a
+  sibling actor (ADR-2607131000 / ADR-2607202600). No personal
+  identifiers -- a self-chosen handle and an opaque pointer to the
+  conversation that already exists."
+  [{:keys [candidate-id handle provenance claimed-skills available-from
+           location-scope contact-ref]}]
+  {:summary   (str handle " を採用候補として記録(採用判断ではない)")
+   :rationale (str "出自: " (pr-str provenance)
+                   " / 申告スキル " (vec (or claimed-skills #{}))
+                   " / 就業開始可能 " available-from
+                   "。採用の可否は governor と人間が決める。")
+   :cites     [:candidate-intake]
+   :source    nil
+   :effect    :candidate-upsert
+   :value     {:id candidate-id :handle handle :provenance provenance
+               :claimed-skills (or claimed-skills #{})
+               :available-from available-from
+               :location-scope location-scope
+               :contact-ref contact-ref
+               :status :candidate}
+   :confidence 0.8})
+
+(defn- propose-hire
+  "Draft an employment decision: this agency becomes the employer of record
+  for this person. ALWAYS escalates (`staffing.policy/hiring-ops`); the
+  legal name and the eligibility citation are what the human supplies at
+  sign-off, and the eligibility-gate re-checks the citation here exactly as
+  it does at placement."
+  [db {:keys [candidate-id name eligibility]}]
+  (let [c (when db (store/candidate db candidate-id))]
+    {:summary   (str (or (:handle c) candidate-id) " を雇用(要人手承認 — 雇用主責任を負う)")
+     :rationale (str "出自: " (pr-str (:provenance c))
+                     " / eligibility: " (pr-str eligibility)
+                     "。雇用の成立はこの advisor ではなく人間が決める。"
+                     "実際の雇用契約の締結と賃金の支払いはこの actor の外側。")
+     :cites     [:candidate-intake :eligibility]
+     :source    nil
+     :effect    :candidate-hire
+     :value     {:candidate-id candidate-id :name name :eligibility eligibility}
+     :confidence 0.5}))
+
+(defn- propose-decline
+  "Draft a decline. Also always escalates — turning a real applicant down
+  is a decision about a person."
+  [db {:keys [candidate-id reason]}]
+  (let [c (when db (store/candidate db candidate-id))]
+    {:summary   (str (or (:handle c) candidate-id) " を不採用とするドラフト(要人手承認)")
+     :rationale (str "理由(ドラフト): " (or reason "未記載")
+                     "。候補者記録は削除せず :declined として残す。")
+     :cites     [:candidate-intake]
+     :source    nil
+     :effect    :candidate-decline
+     :value     {:candidate-id candidate-id :reason reason}
+     :confidence 0.5}))
+
 (defn infer
   "Route a request to the right proposal generator.
   request: {:op kw :subject id ...op-specific...}"
@@ -127,6 +192,9 @@
     :timesheet/approve   (propose-approve db request)
     :report/query        (propose-report db request)
     :dispute/request     (propose-dispute db request)
+    :candidate/intake    (propose-intake request)
+    :worker/hire         (propose-hire db request)
+    :worker/decline      (propose-decline db request)
     {:summary "未対応の操作" :rationale (str op) :cites [] :source nil
      :effect :noop :confidence 0.0}))
 

@@ -25,13 +25,28 @@
     4. wage-compliance-gate   — does the approved timesheet's effective
                                 hourly rate meet the jurisdiction's
                                 operator-maintained wage floor?
-    5. licensed-disclosure    — is there an active client billing contract,
+    5. unknown-worker         — is the placement's worker actually employed
+                                here? (also what keeps a dispatch away from
+                                someone only recorded as a candidate)
+    6. provenance-gate        — does a candidate record state how the person
+                                arrived (direct application, or a referral
+                                draft naming a fleet actor + draft id)?
+    7. candidate-lifecycle    — candidate → hired | declined, exactly once.
+    8. scope-gate             — does the proposal carry a personal
+                                identifier or a payment/tax field the schema
+                                excludes structurally?
+    9. licensed-disclosure    — is there an active client billing contract,
                                 and does the requested report stay within
                                 its tier?
-    6. confidence floor       — LLM confidence below threshold → escalate.
-    7. high-risk-assignment gate — the assignment is hazardous-duty →
+   10. confidence floor       — LLM confidence below threshold → escalate.
+   11. high-risk-assignment gate — the assignment is hazardous-duty →
                                 always escalate, regardless of confidence.
-    8. dispute requests       — a worker/client dispute NEVER auto-resolves,
+   12. hiring ops             — `:worker/hire`/`:worker/decline` NEVER
+                                auto-commit at any phase or confidence.
+                                Becoming a real person's employer of record
+                                (or turning them down) is a human decision
+                                this actor only prepares, governs, records.
+   13. dispute requests       — a worker/client dispute NEVER auto-resolves,
                                 at any confidence, any phase."
   (:require [clojure.set :as set]
             [clojure.string :as str]
@@ -44,10 +59,56 @@
 
 (def permissions
   "actor-role → set of operations it may perform."
-  {:staffing-coordinator #{:assignment/place :assignment/extend}
+  {:staffing-coordinator #{:assignment/place :assignment/extend :candidate/intake}
+   ;; Hiring is what makes this agency the employer of record for a real
+   ;; person, so it sits with the role that owns that liability -- and is
+   ;; additionally routed to a human by `check` at every phase.
+   :hiring-manager       #{:candidate/intake :worker/hire :worker/decline}
    :payroll-officer      #{:timesheet/approve}
    :dispute-officer      #{:dispute/request}
    :client-user          #{:report/query}})
+
+(def hiring-ops
+  "The two ops that decide a real person's employment relationship with
+  this agency. Never auto-committable at any phase and never waivable by
+  confidence: a human signs off on who is hired, and on who is turned
+  down."
+  #{:worker/hire :worker/decline})
+
+(def private-fields
+  "Fields that must NEVER appear in a proposal's value. A candidate record
+  carries no personal identifiers at all (see `staffing.store`), and even
+  the hired worker record has no field for a bank account or tax id
+  because this actor never disburses payroll (ADR-2607111600 §1). This
+  check is defense in depth against an advisor -- or a future schema
+  change -- smuggling one in."
+  #{:applicant-home-address :applicant-phone :applicant-email
+    :applicant-date-of-birth :applicant-national-id
+    :worker-bank-account :worker-tax-id})
+
+(def referral-source-actors
+  "Sibling actors whose human-carried referral drafts this agency accepts
+  as a stated provenance, per ADR-2607202600's routing table (on-site-
+  recurring lands here) and ADR-2607131000's handoff rule. `:direct-
+  application` covers someone who applied to the agency itself.
+
+  This validates the SHAPE of a provenance claim -- that it names an actor
+  in this fleet's registry naming, or a direct application -- and nothing
+  more. It deliberately does NOT verify that the draft exists on the other
+  actor's side: confirming that would require the cross-actor invocation
+  ADR-2607131000 forbids. An operator reconciling both ledgers by hand is
+  the intended (and only) end-to-end check."
+  #{"cloud-itonami-isic-6399" "cloud-itonami-isic-7810"
+    "cloud-itonami-isic-8299" "cloud-itonami-isic-7820"})
+
+(defn- referral-actor-name?
+  "A fleet actor name we accept as a referral origin: one of the named
+  staffing/matching actors, or any `cloud-itonami-isco-NNNN` occupation
+  actor (the origin side of ADR-2607202600's human-required gap)."
+  [n]
+  (boolean (and (string? n)
+                (or (contains? referral-source-actors n)
+                    (re-matches #"cloud-itonami-isco-\d{4}" n)))))
 
 (def tier-columns
   "For `:report/query` — the columns each licensed client-billing tier may
@@ -84,9 +145,16 @@
     [{:rule :rbac :detail (str actor-role " は " op " の権限を持たない")}]))
 
 (defn- eligibility-violations
+  "The same eligibility discipline at BOTH points it matters: dispatching
+  someone (place/extend), and becoming their employer of record in the
+  first place (`:worker/hire`). Hiring reads the citation from the
+  proposal's own `:value :eligibility` — the record about to be written —
+  because at hire time there is no worker row to read it from yet."
   [{:keys [op]} proposal]
-  (when (contains? #{:assignment/place :assignment/extend} op)
-    (let [src (:source proposal)]
+  (when (contains? #{:assignment/place :assignment/extend :worker/hire} op)
+    (let [src (if (= :worker/hire op)
+                (get-in proposal [:value :eligibility])
+                (:source proposal))]
       (cond
         (or (nil? src) (not (facts/class-allowed? (:class src))))
         [{:rule :eligibility-gate
@@ -97,6 +165,83 @@
           :detail "operator-verified-eligibility は :verification-ref を要求する"}]
 
         :else nil))))
+
+(defn- unknown-worker-violations
+  "A placement/extension against a worker id the SSoT does not know is a
+  HARD rejection. Someone who has only been recorded as a candidate is
+  deliberately NOT in `:workers` (see `staffing.store`), so this is also
+  what stops a dispatch from reaching a person this agency has not hired."
+  [{:keys [op]} proposal st]
+  (when (contains? #{:assignment/place :assignment/extend} op)
+    (let [worker-id (or (get-in proposal [:value :worker-id])
+                        (:worker-id proposal))]
+      (when (nil? (store/worker st worker-id))
+        [{:rule :unknown-worker
+          :detail (str "在籍しない worker への配属: " (pr-str worker-id)
+                       (when (store/candidate st worker-id)
+                         " (候補者として在籍。hire 前は配属不可)"))}]))))
+
+(defn- provenance-violations
+  "A candidate record must state HOW the person arrived, and the claim must
+  be shape-valid (`referral-actor-name?`): a direct application, or a
+  referral draft naming a fleet actor AND its draft id. An unattributed
+  candidate would make the two-sided ledger reconciliation ADR-2607131000
+  relies on impossible."
+  [{:keys [op]} proposal]
+  (when (= op :candidate/intake)
+    (let [{:keys [kind from-actor draft-id]} (get-in proposal [:value :provenance])]
+      (cond
+        (nil? kind)
+        [{:rule :provenance-gate :detail "候補者の出自(:provenance)が無い"}]
+
+        (= :direct-application kind) nil
+
+        (not= :referral-draft kind)
+        [{:rule :provenance-gate :detail (str "未知の出自種別: " (pr-str kind))}]
+
+        (not (referral-actor-name? from-actor))
+        [{:rule :provenance-gate
+          :detail (str "referral の紹介元 actor 名がフリートの命名に一致しない: "
+                       (pr-str from-actor))}]
+
+        (str/blank? (str draft-id))
+        [{:rule :provenance-gate :detail "referral-draft に :draft-id が無い"}]))))
+
+(defn- candidate-lifecycle-violations
+  "candidate → hired | declined, exactly once. A duplicate intake would
+  merge over an existing record; re-hiring would mint a second employment
+  relationship for the same person; declining someone already hired would
+  leave them dispatchable while marked declined."
+  [{:keys [op] :as request} proposal st]
+  (let [id (or (get-in proposal [:value :id])
+               (get-in proposal [:value :candidate-id])
+               (:subject request))
+        c  (when id (store/candidate st id))]
+    (case op
+      :candidate/intake
+      (cond
+        (nil? id) [{:rule :candidate-lifecycle :detail "候補者に id が無い"}]
+        (some? (store/worker st id))
+        [{:rule :candidate-lifecycle :detail (str id " は既に在籍 worker")}]
+        (some? c)
+        [{:rule :candidate-lifecycle
+          :detail (str id " の候補者記録は既にある (status=" (:status c) ")")}])
+
+      (:worker/hire :worker/decline)
+      (cond
+        (nil? c) [{:rule :candidate-lifecycle :detail (str "候補者が存在しない: " (pr-str id))}]
+        (not= :candidate (:status c))
+        [{:rule :candidate-lifecycle
+          :detail (str id " は既に " (:status c) " 済み — 再処理しない")}])
+
+      nil)))
+
+(defn- scope-violations
+  [proposal]
+  (let [ks  (set (keys (:value proposal)))
+        bad (set/intersection ks private-fields)]
+    (when (seq bad)
+      [{:rule :scope-gate :detail (str "スキーマ外(個人情報/送金系)フィールドを含む: " (vec bad))}])))
 
 (defn- tenure-limit-violations
   [{:keys [op]} proposal st]
@@ -169,6 +314,10 @@
   (let [hard    (into []
                       (concat (rbac-violations request context)
                               (eligibility-violations request proposal)
+                              (unknown-worker-violations request proposal st)
+                              (provenance-violations request proposal)
+                              (candidate-lifecycle-violations request proposal st)
+                              (scope-violations proposal)
                               (tenure-limit-violations request proposal st)
                               (wage-compliance-violations request proposal st)
                               (licensed-disclosure-violations request context proposal st)))
@@ -176,14 +325,16 @@
         low?        (< conf confidence-floor)
         hazardous?  (and (= :assignment/place (:op request)) (hazardous? proposal))
         dispute?    (= :dispute/request (:op request))
+        hiring?     (contains? hiring-ops (:op request))
         hard?       (boolean (seq hard))]
-    {:ok?          (and (not hard?) (not low?) (not hazardous?) (not dispute?))
+    {:ok?          (and (not hard?) (not low?) (not hazardous?) (not dispute?) (not hiring?))
      :violations   hard
      :confidence   conf
      :hard?        hard?
-     :escalate?    (and (not hard?) (or low? hazardous? dispute?))
+     :escalate?    (and (not hard?) (or low? hazardous? dispute? hiring?))
      :hazardous?   hazardous?
-     :dispute?     dispute?}))
+     :dispute?     dispute?
+     :hiring?      hiring?}))
 
 (defn hold-fact
   "The audit fact written when a proposal is rejected (HOLD)."

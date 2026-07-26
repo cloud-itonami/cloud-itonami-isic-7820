@@ -61,3 +61,59 @@
     (is (= [] (store/ledger s)))
     (store/with-workers s {"x" {:id "x" :name "X" :eligibility nil}})
     (is (= "X" (:name (store/worker s "x"))))))
+
+;; ───────────── hiring candidates (both backends) ─────────────
+;; A candidate is not a worker. That is a container boundary, not a status
+;; filter -- see staffing.store's ns docstring.
+
+(deftest candidate-read-parity
+  (doseq [[label s] (backends)]
+    (testing label
+      (let [c (store/candidate s "cd-100")]
+        (is (= "haruki (demo)" (:handle c)))
+        (is (= :referral-draft (get-in c [:provenance :kind])))
+        (is (= "cloud-itonami-isco-7126" (get-in c [:provenance :from-actor])))
+        (is (= #{:on-site-install :equipment-teardown} (:claimed-skills c)))
+        (is (= :per-engagement (:location-scope c)))
+        (is (= :candidate (:status c))))
+      (is (= 1 (count (store/all-candidates s))))
+      (is (nil? (store/worker s "cd-100")) "a candidate is not employed")
+      (is (empty? (store/assignments-of-worker s "cd-100"))))))
+
+(deftest hire-parity-creates-the-worker-and-keeps-the-candidate
+  (doseq [[label s] (backends)]
+    (testing label
+      (store/commit-record! s {:effect :candidate-hire
+                               :value {:candidate-id "cd-100" :name "採用者(テスト)"
+                                       :eligibility {:class :operator-verified-eligibility
+                                                     :ref "jpn-zairyu:test"
+                                                     :verification-ref "ver-test"}}})
+      (let [w (store/worker s "cd-100")]
+        (is (= "採用者(テスト)" (:name w)))
+        (is (= :operator-verified-eligibility (get-in w [:eligibility :class])))
+        (is (= "ver-test" (get-in w [:eligibility :verification-ref]))))
+      (is (= :hired (:status (store/candidate s "cd-100")))))))
+
+(deftest decline-parity-creates-no-worker
+  (doseq [[label s] (backends)]
+    (testing label
+      (store/commit-record! s {:effect :candidate-decline
+                               :value {:candidate-id "cd-100" :reason :location-mismatch}})
+      (is (nil? (store/worker s "cd-100")))
+      (is (= :declined (:status (store/candidate s "cd-100"))))
+      (is (= :location-mismatch (:decline-reason (store/candidate s "cd-100")))))))
+
+(deftest candidate-upsert-parity
+  (doseq [[label s] (backends)]
+    (testing label
+      (store/commit-record! s {:effect :candidate-upsert
+                               :value {:id "cd-200" :handle "nagi (test)"
+                                       :provenance {:kind :direct-application}
+                                       :claimed-skills #{:equipment-teardown}
+                                       :available-from "2026-10-01"
+                                       :location-scope :per-engagement
+                                       :contact-ref "gh-issue:example/repo#2"
+                                       :status :candidate}})
+      (is (= "nagi (test)" (:handle (store/candidate s "cd-200"))))
+      (is (= :direct-application (get-in (store/candidate s "cd-200") [:provenance :kind])))
+      (is (nil? (store/worker s "cd-200"))))))
