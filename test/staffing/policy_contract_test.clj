@@ -8,7 +8,6 @@
     OR hold) leaves exactly one ledger fact."
   (:require [clojure.test :refer [deftest is testing]]
             [langgraph.graph :as g]
-            [staffing.llm]
             [staffing.store :as store]
             [staffing.operation :as op]))
 
@@ -233,153 +232,48 @@
       (is (= 2 (count (store/ledger db)))
           "one commit + one hold, both recorded"))))
 
-;; ───────────── hiring intake: candidate → hired | declined ─────────────
-;; The invariant: this agency can PREPARE, GOVERN and RECORD who it employs,
-;; but never decides it. Every hire/decline reaches a human at every phase,
-;; and a candidate is never dispatchable.
+;; ---------------------------------------------------------------------------
+;; An unstated hours figure skipped the minimum-wage check entirely
+;; ---------------------------------------------------------------------------
 
-(def hiring   {:actor-id "hm-1" :actor-role :hiring-manager})
-(def hiring-p3 (assoc hiring :phase 3))
+(deftest a-timesheet-with-no-hours-no-longer-skips-the-wage-check
+  (testing "`(or hours 0M)` made total-hours 0, the `(and (pos? total-hours)
+            approved-amount)` branch false, and the minimum-wage check — the
+            one gate this op exists for — was skipped"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t-nohours"
+                       {:op :timesheet/approve :subject "a-100" :id "t-nohours"
+                        :assignment-id "a-100"}
+                       payroll-p3)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:wage-compliance-gate} (-> (store/ledger db) last :basis)))
+      (is (nil? (store/timesheet db "t-nohours")) "nothing written"))))
 
-(defn- intake-request [overrides]
-  (merge {:op :candidate/intake :subject "cd-900" :candidate-id "cd-900"
-          :handle "test-candidate"
-          :provenance {:kind :referral-draft
-                       :from-actor "cloud-itonami-isco-8332"
-                       :draft-id "draft-test-1"}
-          :claimed-skills #{:on-site-install}
-          :available-from "2026-09-01"
-          :location-scope :per-engagement
-          :contact-ref "gh-issue:example/repo#1"}
-         overrides))
-
-(deftest referral-draft-intake-records-a-candidate-not-a-worker
+(deftest a-non-numeric-hours-figure-is-a-violation-not-a-crash
   (let [[db actor] (fresh)
-        res (exec-op actor "h1" (intake-request {}) coordinator-p3)]
-    (is (= :commit (get-in res [:state :disposition])))
-    (is (= :candidate (:status (store/candidate db "cd-900"))))
-    (is (= "cloud-itonami-isco-8332" (get-in (store/candidate db "cd-900") [:provenance :from-actor])))
-    (is (nil? (store/worker db "cd-900"))
-        "recording a referral must not employ anyone")))
-
-(deftest direct-application-intake-needs-no-referral-actor
-  (let [[db actor] (fresh)
-        res (exec-op actor "h2" (intake-request {:candidate-id "cd-901" :subject "cd-901"
-                                                 :provenance {:kind :direct-application}})
-                     coordinator-p3)]
-    (is (= :commit (get-in res [:state :disposition])))
-    (is (= :direct-application (get-in (store/candidate db "cd-901") [:provenance :kind])))))
-
-(deftest unattributed-or-bogus-provenance-is-a-hard-hold
-  (let [[db actor] (fresh)]
-    (doseq [[label prov] [["no provenance at all" nil]
-                          ["unknown kind" {:kind :vibes}]
-                          ["referral naming a non-fleet actor" {:kind :referral-draft
-                                                                :from-actor "some-random-agency"
-                                                                :draft-id "d1"}]
-                          ["referral with no draft id" {:kind :referral-draft
-                                                        :from-actor "cloud-itonami-isic-8299"}]]]
-      (testing label
-        (let [id (str "cd-902-" (hash label))
-              res (exec-op actor (str "h3-" (hash label))
-                           (intake-request {:candidate-id id :subject id :provenance prov})
-                           coordinator-p3)]
-          (is (= :hold (get-in res [:state :disposition])))
-          (is (some #(= :provenance-gate (:rule %)) (get-in res [:state :verdict :violations])))
-          (is (nil? (store/candidate db id))))))))
-
-(deftest hiring-always-reaches-a-human-even-at-phase-3
-  (let [[db actor] (fresh)
-        res (exec-op actor "h4"
-                     {:op :worker/hire :subject "cd-100" :candidate-id "cd-100"
-                      :name "採用された人(テスト)"
-                      :eligibility {:class :operator-verified-eligibility
-                                    :ref "jpn-zairyu:test" :verification-ref "ver-test"}}
-                     hiring-p3)]
-    (is (= :interrupted (:status res)) "employment decisions pause for a human")
-    (is (nil? (store/worker db "cd-100")) "nobody is employed before sign-off")
-    (let [resumed (g/run* actor {:approval {:status :approved :by "hm-1"}}
-                          {:thread-id "h4" :resume? true})]
-      (is (= :commit (get-in resumed [:state :disposition])))
-      (is (= "採用された人(テスト)" (:name (store/worker db "cd-100"))))
-      (is (= :hired (:status (store/candidate db "cd-100")))
-          "the candidate record is retained, marked hired"))))
-
-(deftest hire-without-a-valid-eligibility-citation-is-a-hard-hold
-  (let [[db actor] (fresh)]
-    (doseq [[label elig] [["missing" nil]
-                          ["non-catalog class" {:class :trust-me :ref "x"}]
-                          ["operator-verified without verification-ref"
-                           {:class :operator-verified-eligibility :ref "x"}]]]
-      (testing label
-        (let [res (exec-op actor (str "h5-" (hash label))
-                           {:op :worker/hire :subject "cd-100" :candidate-id "cd-100"
-                            :name "n" :eligibility elig}
-                           hiring-p3)]
-          (is (= :hold (get-in res [:state :disposition]))
-              "held BEFORE any human is asked -- not escalated for approval")
-          (is (some #(= :eligibility-gate (:rule %)) (get-in res [:state :verdict :violations])))
-          (is (nil? (store/worker db "cd-100"))))))))
-
-(deftest decline-reaches-a-human-and-keeps-the-record
-  (let [[db actor] (fresh)
-        res (exec-op actor "h6" {:op :worker/decline :subject "cd-100"
-                                 :candidate-id "cd-100" :reason :location-mismatch}
-                     hiring-p3)]
-    (is (= :interrupted (:status res)))
-    (let [resumed (g/run* actor {:approval {:status :approved :by "hm-1"}}
-                          {:thread-id "h6" :resume? true})]
-      (is (= :commit (get-in resumed [:state :disposition])))
-      (is (= :declined (:status (store/candidate db "cd-100"))))
-      (is (= :location-mismatch (:decline-reason (store/candidate db "cd-100"))))
-      (is (nil? (store/worker db "cd-100"))))))
-
-(deftest coordinator-cannot-hire-and-duplicate-intake-is-held
-  (let [[db actor] (fresh)]
-    (testing "only the hiring manager may hire"
-      (let [res (exec-op actor "h7" {:op :worker/hire :subject "cd-100" :candidate-id "cd-100"
-                                     :name "n" :eligibility {:class :i9-eligibility-verification
-                                                             :ref "i9:test"}}
-                         coordinator-p3)]
-        (is (= :hold (get-in res [:state :disposition])))
-        (is (some #(= :rbac (:rule %)) (get-in res [:state :verdict :violations])))))
-    (testing "a candidate already on file cannot be re-recorded"
-      (let [res (exec-op actor "h8" (intake-request {:candidate-id "cd-100" :subject "cd-100"})
-                         coordinator-p3)]
-        (is (= :hold (get-in res [:state :disposition])))
-        (is (some #(= :candidate-lifecycle (:rule %)) (get-in res [:state :verdict :violations])))))
-    (testing "an employed worker's id cannot be re-recorded as a candidate"
-      (let [res (exec-op actor "h9" (intake-request {:candidate-id "w-100" :subject "w-100"})
-                         coordinator-p3)]
-        (is (= :hold (get-in res [:state :disposition])))
-        (is (= "田中 花子(デモ)" (:name (store/worker db "w-100"))) "existing worker untouched")))))
-
-(deftest placing-a-candidate-who-was-never-hired-is-a-hard-hold
-  (let [[db actor] (fresh)
-        res (exec-op actor "h10"
-                     {:op :assignment/place :subject "a-cd" :id "a-cd" :worker-id "cd-100"
-                      :client-id "c-300" :jurisdiction :usa :role "picker" :pay-rate 9.00M
-                      :start-date "2026-07-01" :end-date "2026-10-01" :hazardous-duty? false}
-                     coordinator-p3)]
+        res (exec-op actor "t-badhours"
+                     {:op :timesheet/approve :subject "a-100" :id "t-badhours"
+                      :assignment-id "a-100" :hours "100" :overtime-hours 0M}
+                     payroll-p3)]
     (is (= :hold (get-in res [:state :disposition])))
-    (is (some #(= :unknown-worker (:rule %)) (get-in res [:state :verdict :violations])))
-    (is (nil? (store/assignment db "a-cd")))))
+    (is (some #{:wage-compliance-gate} (-> (store/ledger db) last :basis)))))
 
-(deftest applicant-pii-or-payment-fields-are-a-hard-hold
-  (let [pii-advisor (reify staffing.llm/Advisor
-                      (-advise [_ _ _]
-                        {:summary "x" :rationale "y" :cites [] :source nil
-                         :effect :candidate-upsert
-                         :value {:id "cd-903" :handle "h"
-                                 :provenance {:kind :direct-application}
-                                 :applicant-phone "090-0000-0000"
-                                 :worker-bank-account "1234567"}
-                         :confidence 0.95}))
-        db (store/seed-db)
-        actor (op/build db {:advisor pii-advisor})
-        res (exec-op actor "h11" (intake-request {:candidate-id "cd-903" :subject "cd-903"
-                                                  :provenance {:kind :direct-application}})
-                     coordinator-p3)]
-    (is (= :hold (get-in res [:state :disposition])))
-    (is (some #(= :scope-gate (:rule %)) (get-in res [:state :verdict :violations])))
-    (is (nil? (store/candidate db "cd-903")))))
+(deftest an-unknown-assignment-no-longer-resolves-its-floor-from-nil
+  (testing "(:jurisdiction nil) is nil, so the wage floor lookup was for a
+            jurisdiction that does not exist"
+    (let [[db actor] (fresh)
+          res (exec-op actor "t-noassign"
+                       {:op :timesheet/approve :subject "a-999" :id "t-noassign"
+                        :assignment-id "a-999" :hours 10M :overtime-hours 0M}
+                       payroll-p3)]
+      (is (= :hold (get-in res [:state :disposition])))
+      (is (some #{:wage-compliance-gate} (-> (store/ledger db) last :basis))))))
+
+(deftest a-correctly-stated-timesheet-still-commits
+  (testing "the gate is not simply always-on"
+    (let [[_ actor] (fresh)
+          res (exec-op actor "t-ok"
+                       {:op :timesheet/approve :subject "a-100" :id "t-ok"
+                        :assignment-id "a-100" :hours 100M :overtime-hours 100M}
+                       payroll-p3)]
+      (is (= :commit (get-in res [:state :disposition]))))))

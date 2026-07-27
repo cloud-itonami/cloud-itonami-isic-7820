@@ -266,20 +266,45 @@
     (let [{:keys [assignment-id hours overtime-hours approved-amount]} (:value proposal)
           asg (store/assignment st assignment-id)
           floor (store/wage-floor st (:jurisdiction asg))
-          total-hours (+ (double (or hours 0M)) (* (double (or overtime-hours 0M)) 1.5))]
+          ;; `(or hours 0M)` used to default an unstated figure to zero, so a
+          ;; timesheet claiming payment with NO hours produced total-hours 0,
+          ;; the `(and (pos? total-hours) approved-amount)` branch was false,
+          ;; and the minimum-wage check was skipped entirely -- the one gate
+          ;; this op exists for. Unstated hours are now a violation, not a zero.
+          total-hours (when (and (number? hours) (or (nil? overtime-hours)
+                                                     (number? overtime-hours)))
+                        (+ (double hours) (* (double (or overtime-hours 0M)) 1.5)))]
       (cond
+        (nil? asg)
+        [{:rule :wage-compliance-gate
+          :detail (str "assignment " assignment-id " が登録されていない -- "
+                       "適用される最低賃金を特定できない")}]
+
         (nil? floor)
         [{:rule :wage-compliance-gate
           :detail (str "jurisdiction " (:jurisdiction asg) " の wage-floor が未登録")}]
 
-        (and (pos? total-hours) approved-amount)
+        (nil? total-hours)
+        [{:rule :wage-compliance-gate
+          :detail (str "労働時間が数値として申告されていない (hours=" (pr-str hours)
+                       " overtime=" (pr-str overtime-hours) ") -- "
+                       "実効時給を計算できないため最低賃金を検証できない")}]
+
+        (not (number? approved-amount))
+        [{:rule :wage-compliance-gate
+          :detail (str "承認額が数値として申告されていない (" (pr-str approved-amount) ") -- "
+                       "実効時給を計算できない")}]
+
+        (not (pos? total-hours))
+        [{:rule :wage-compliance-gate
+          :detail "申告労働時間が 0 以下 -- 実効時給を計算できない"}]
+
+        :else
         (let [effective (/ (double approved-amount) total-hours)]
           (when (< effective (double (:hourly-min floor)))
             [{:rule :wage-compliance-gate
               :detail (str "実効時給が最低賃金未満: effective=" effective
-                           " < floor=" (:hourly-min floor))}]))
-
-        :else nil))))
+                           " < floor=" (:hourly-min floor))}]))))))
 
 (defn- licensed-disclosure-violations
   [{:keys [op]} {:keys [tenant]} proposal st]

@@ -76,9 +76,17 @@
   [db {:keys [id assignment-id hours overtime-hours miscalc?]}]
   (let [asg (store/assignment db assignment-id)
         rate (:pay-rate asg)
-        amount (if miscalc?
-                 (* rate (+ hours overtime-hours)) ;; overtime paid at straight time, not 1.5x
-                 (+ (* rate hours) (* rate overtime-hours 1.5M)))]
+        ;; nil when the amount cannot be computed -- an unknown assignment
+        ;; (so no pay-rate), or hours that were not stated as numbers. This
+        ;; used to reach `*` and throw a NullPointerException out of the
+        ;; advisor, before `staffing.policy`'s wage-compliance gate ever
+        ;; ran. An un-computable amount must reach that gate, not crash
+        ;; ahead of it.
+        computable? (and (number? rate) (number? hours) (number? overtime-hours))
+        amount (when computable?
+                 (if miscalc?
+                   (* rate (+ hours overtime-hours)) ;; overtime paid at straight time, not 1.5x
+                   (+ (* rate hours) (* rate overtime-hours 1.5M))))]
     {:summary   (str "timesheet approve: " id " (" hours "h + " overtime-hours "h OT)")
      :rationale "assignment 記載の pay-rate と提出時間からの機械計算。"
      :cites     [:hours :overtime-hours :pay-rate]
