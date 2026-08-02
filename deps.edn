@@ -10,7 +10,16 @@
 io.github.kotoba-lang/langgraph
         {:local/root "../../kotoba-lang/langgraph"}
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}}
+        {:local/root "../../kotoba-lang/langchain-store"}
+        ;; Statutory working-time limits (overtime / breaks / rest periods)
+        ;; by jurisdiction. The governor recomputes from :worked-spans via
+        ;; worklaw/check — the advisor's hours are never trusted, same
+        ;; pattern as kintai (ADR-2607310400/0500) and isco-4313's labor
+        ;; recomputation. Capability library wrapping convention per
+        ;; ADR-2607310300 D8: this is a horizontal capability, not an
+        ;; ISIC-coded sector business.
+        io.github.kotoba-lang/worklaw
+        {:local/root "../../kotoba-lang/worklaw"}}
  :aliases
  {;; offline workspace dev — pin transitive langchain to local checkout
   :dev {:override-deps
