@@ -50,6 +50,7 @@
                                 at any confidence, any phase."
   (:require [clojure.set :as set]
             [clojure.string :as str]
+            [kotoba.worklaw :as worklaw]
             [staffing.facts :as facts]
             [staffing.store :as store]))
 
@@ -260,6 +261,83 @@
               :detail (str "累計継続期間が法定上限を超過: jurisdiction=" jurisdiction
                            " total-months=" total " > cap=" cap)}]))))))
 
+(def ^:private jurisdiction->worklaw
+  "Bridge from this actor's bare jurisdiction codes (:jpn/:usa/:deu/:fra)
+  to worklaw's legal-hierarchy paths ([:jp]/[:us]/[:eu :de]/[:eu :fr]).
+  A jurisdiction worklaw has no rules for resolves to nil, which flows to
+  coverage :none -> HARD HOLD. Bare country codes are NOT aliased into a
+  hierarchy (worklaw CLAUDE.md: a French worker is [:eu :fr], not [:fr])."
+  {:jpn [:jp], :usa [:us], :deu [:eu :de], :fra [:eu :fr]})
+
+(defn- working-time-violations
+  "Statutory working-time gate — the complement of wage-compliance-gate.
+  The hours a worker actually worked, checked against the jurisdiction's
+  statute via kotoba.worklaw/check. Modeled on kintai.governor's use of
+  worklaw (ADR-2607310400/0500) and isco-4313's labor recomputation: the
+  advisor's claimed hours are NEVER trusted; worklaw recomputes from
+  :worked-spans.
+
+  This is a capability-library wiring proving slice (ADR-2607310300 D8):
+  worklaw is a horizontal capability, not an ISIC-coded sector business,
+  and this vertical consumes it the way isco-4313 consumes labor.
+
+  Phased introduction — a timesheet that carries no :worked-spans is
+  skipped by THIS gate (wage-compliance-gate still applies from
+  :hours/:overtime-hours). kintai fully enforces worklaw's 'silence is
+  never compliance'; this agency actor starts with the timecards its
+  clients actually return worked spans on and widens as coverage grows.
+  The skip is a rollout boundary, not a relaxation of the statute — do
+  NOT add an 'assume compliant when no spans' flag.
+
+  When spans ARE present:
+  - worklaw coverage :none (jurisdiction not in worklaw) -> HARD HOLD. No
+    human signature substitutes for a statute nobody encoded.
+  - worklaw/prohibitions (daily cap, missed break, weekly rest) -> HARD
+    HOLD. Agency, client and worker agreeing is not a source of law.
+  - caller-error unevaluated (:missing-period/:missing-calendar) -> HARD
+    HOLD. :window-longer-than-period (inherent — a week cannot judge an
+    annual cap) is NOT a violation and NOT pooled here."
+  [{:keys [op]} proposal st]
+  (when (= op :timesheet/approve)
+    (let [spans (seq (get-in proposal [:value :worked-spans]))]
+      (when spans
+        (let [assignment-id (:assignment-id (:value proposal))
+              asg           (store/assignment st assignment-id)
+              j             (get jurisdiction->worklaw (:jurisdiction asg))
+              ;; date-of owns the timezone (worklaw docstring): which side of
+              ;; midnight a night shift falls on decides a daily cap. UTC day
+              ;; for this repo's R0 scope — a real deployment hands the
+              ;; worker's tz here. Honest about the simplification.
+              date-of       #(quot % (* 24 60 60 1000))
+              period        (let [from (get-in proposal [:value :period-from])
+                                  to   (get-in proposal [:value :period-to])]
+                              (when (and from to) [from to]))
+              result        (worklaw/check spans j date-of
+                                           (cond-> {} period (assoc :period period)))
+              prohibits     (worklaw/prohibitions result)
+              caller-error  (filter #(contains? #{:missing-period :missing-calendar}
+                                                (:unevaluated/reason %))
+                                    (:worklaw/unevaluated result))]
+          (cond
+            (nil? j)
+            [{:rule :unchecked-working-law
+              :detail (str "法定労働時間の法域が worklaw 未サポート: jurisdiction="
+                           (:jurisdiction asg)
+                           " — ルールを追加するまでこの timesheet は承認できない"
+                           "（規則が無いことは適法であることではない）")}]
+
+            (seq caller-error)
+            [{:rule :unevaluable-working-law
+              :detail (str "検査に必要な入力が request に無い: "
+                           (pr-str (mapv :rule/id caller-error))
+                           "（:period / 期間を渡すこと）")}]
+
+            (seq prohibits)
+            [{:rule :working-time-violation
+              :detail (str (count prohibits) " 件の法定労働時間違反: "
+                           (pr-str (mapv #(get-in % [:violation/rule :rule/id]) prohibits))
+                           "（agency・client・worker の合意は法の源泉ではない）")}]))))))
+
 (defn- wage-compliance-violations
   [{:keys [op]} proposal st]
   (when (= op :timesheet/approve)
@@ -345,6 +423,7 @@
                               (scope-violations proposal)
                               (tenure-limit-violations request proposal st)
                               (wage-compliance-violations request proposal st)
+                              (working-time-violations request proposal st)
                               (licensed-disclosure-violations request context proposal st)))
         conf        (:confidence proposal 0.0)
         low?        (< conf confidence-floor)
