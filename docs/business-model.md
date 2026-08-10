@@ -85,6 +85,68 @@ Operators can sell:
 | Detailed tier | mid-size client with own HR review | monthly platform fee |
 | Audit tier | client with compliance/legal review needs | monthly fee + usage |
 | Fleet wholesale | other cloud-itonami operators | API metering |
+| Managed Starter | 稼働スタッフ100–300名・内勤5–15名の中小派遣会社1社 | ¥60,000/月 flat |
+
+**Market-anchored (2026-08-10)**: benchmarked against the real 派遣管理
+システム (temp-staffing management system) market — the adjacent commercial
+category to this actor — not against generic HR SaaS. Of the products
+surveyed, **only 3 vendors publish real numbers on their own sites**:
+
+- **HRstation** (アルティウスリンク/KDDIグループ) — 「初期費用・導入費用は無料」
+  「スタッフ一人につき月額最大800円（税抜）」, and 「1か月のご利用日数が15日以下の
+  ユーザーについては、月額400円（税抜）」; the 派遣元 pays, the 派遣先 uses it free
+  (<https://www.altius-link.com/hrstation/price/>). At 100–300 稼働スタッフ that
+  is **¥80,000–240,000/月**.
+- **MatchinGood** — 「初期費用 無料」「月額 ¥22,000（税込）〜」, plan-dependent
+  (<https://www.matchingood.co.jp/price/>). **¥22,000〜/月**; the upper bound is
+  not published.
+- **PORTERS** — 「初期費用＋月額利用料の、シンプルな料金体系です。最低15,000円～
+  ユーザー数に応じて費用が変動します」 on the vendor's own plan page
+  (<https://hrbc.porters.jp/plan/>); the per-ID tier break (初期100,000円 /
+  1ID月額15,000円 / 11ID以降7,500円) appears only in aggregator listings
+  (<https://boxil.jp/mag/a8309/>). At 5–15 内勤ID that is **¥75,000–187,500/月**.
+
+**e-staffing publishes nothing** — its own site has no pricing page at all
+(<https://www.e-staffing.co.jp/>); the widely-quoted 「1,000円/スタッフ」 is
+aggregator-reported, not vendor-published. So are **staff-one** (初期300,000円 +
+月額20,000円+200円/人), **CROSS STAFF** (月額30,000円), **jobs** (月額33,000円) and
+**ｅ心伝心** (月額30,000円). **スタッフエクスプレス, CastingONE, 派遣can,
+The Staff-V, DigiSheet and most of the rest disclose nothing publicly** and route
+to a quote form. The observed market therefore splits into a flat-fee entry band
+(**¥22,000–33,000/月**) and a per-staff compliance band
+(**¥80,000–240,000/月** at our assumed size).
+
+**Why the ¥50,000–150,000/月 range used by the HR/recruiting siblings
+(`cloud-itonami-isic-7810`, `6399`, `6310`, `5820`) is deliberately NOT carried
+over here**: the billing driver in 派遣 is **稼働スタッフ数, not 内勤の席数** —
+HRstation's ¥800/人 and e-staffing's reported ¥1,000/人 are what actually price
+this market, and both scale with dispatched workers rather than recruiter seats.
+`7810` (職業紹介) is a one-time match-and-fee business where the agency is never
+the employer of record, and its band was anchored on per-seat HR/recruiting/CRM
+SaaS. Those comparators have no evidenced relationship to 抵触日/3年ルール
+compliance pricing, so importing that number would be an unfounded figure
+dressed as a benchmark.
+
+**¥60,000/月 flat** sits just below the geometric centre of the measured
+¥22,000–240,000 range, biased low. It is above every flat-fee entry product
+because none of those carries statutory judgment (they are 単機能の管理CRM/勤怠).
+It is below the per-staff compliance band because this actor does **not** collect
+勤怠打刻, does **not** generate or retain 法定帳票 (抵触日通知書 etc., which
+e-staffing keeps for 12年4ヶ月), does **not** issue invoices, and by construction
+**never disburses payroll or moves money** — it computes an approved amount and
+gates a placement. Pricing is flat rather than per-staff because what is being
+sold is not per-head paperwork throughput but a single property no comparator
+has: an independent StaffingGovernor that can permanently refuse a placement or
+extension that would breach a tenure cap or a wage floor, on a citable statutory
+basis, with the refusal recorded in an immutable ledger.
+
+**Subscribe (2026-08-10)**: a live Stripe Payment Link for the Managed Starter
+tier (¥60,000/月 flat) is available now — [**subscribe to Managed Starter**](https://buy.stripe.com/5kQ00keuXeRO3va922eEo0n).
+This is a no-code Stripe-hosted checkout; nothing in this repo's actor code
+changed. After subscribing, contact gftdcojp to arrange managed-tenant setup
+(manual fulfillment today, no automated onboarding yet). **No staffing agency
+has claimed or subscribed to this tier yet — this is a live, working checkout
+with zero paid tenants, not a claim of existing revenue.**
 
 ## Unit Economics
 
