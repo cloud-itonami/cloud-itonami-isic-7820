@@ -49,7 +49,7 @@
    13. dispute requests       — a worker/client dispute NEVER auto-resolves,
                                 at any confidence, any phase."
   (:require [clojure.set :as set]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kotoba.worklaw :as worklaw]
             [staffing.facts :as facts]
             [staffing.store :as store]))
