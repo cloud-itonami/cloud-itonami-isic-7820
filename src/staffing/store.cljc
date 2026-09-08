@@ -55,7 +55,7 @@
   The ledger stays append-only on every backend — 'who placed/extended/
   approved what, on what eligibility/tenure/wage basis' is always a query
   over an immutable log."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [langchain.db :as d]
             [langchain-store.core :as ls]))
 
