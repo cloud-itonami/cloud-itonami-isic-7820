@@ -31,9 +31,9 @@ StaffingSystem (root supervisor)
 ├── ExtensionActor ……… 既存配置の延長(:assignment/extend、tenure-limit-gate の主戦場)
 │
 ├── OperationActor[op] … ★ 1操作 = 1 actor run; TempStaffing-LLM 封じ込め ★
-│     ├── TempStaffing-LLM (sealed)  proposal only(src/staffing/llm.cljc)
-│     ├── StaffingGovernor           INDEPENDENT ゲート(src/staffing/policy.cljc)
-│     ├── Committer                  SSoT/台帳への書き込み(src/staffing/store.cljc)
+│     ├── TempStaffing-LLM (sealed)  proposal only(src/staffing/llm.cljk)
+│     ├── StaffingGovernor           INDEPENDENT ゲート(src/staffing/policy.cljk)
+│     ├── Committer                  SSoT/台帳への書き込み(src/staffing/store.cljk)
 │     └── Recorder                    監査台帳(append-only)
 │
 ├── ReviewActor ……… 人間レビュー(hazardous-duty 配置・異議申立ての interrupt を受ける)
@@ -52,7 +52,7 @@ StaffingSystem (root supervisor)
 
 ## 3. OperationActor 内部(TempStaffing-LLM ラッパー)
 
-`src/staffing/operation.cljc` の langgraph StateGraph として実装。
+`src/staffing/operation.cljk` の langgraph StateGraph として実装。
 **1 run = 1 操作** — 有界で監査可能、無限内部ループを持たない。
 
 ```
@@ -88,7 +88,7 @@ intake → advise → govern → decide ─┬─ commit ───────�
 
 ## 4. StaffingGovernor(独立検閲層)
 
-`src/staffing/policy.cljc`。LLM とは別経路で、提案を可決/拒否/escalate に
+`src/staffing/policy.cljk`。LLM とは別経路で、提案を可決/拒否/escalate に
 判定する。
 
 ```clojure
@@ -119,7 +119,7 @@ intake → advise → govern → decide ─┬─ commit ───────�
 
 ## 5. SSoT と監査台帳
 
-`src/staffing/store.cljc`。dev は in-mem の EDN 事実層(本番は Datomic)。
+`src/staffing/store.cljk`。dev は in-mem の EDN 事実層(本番は Datomic)。
 
 - **entities**: `workers` `clients` `assignments`(worker×client、
   tenure-limit-gate の対象) `timesheets`(wage-compliance-gate の対象)
@@ -131,12 +131,12 @@ intake → advise → govern → decide ─┬─ commit ───────�
 
 ## 6. 開示(governed read)
 
-`src/staffing/report.cljc`。`render-report` は StaffingGovernor が承認した
+`src/staffing/report.cljk`。`render-report` は StaffingGovernor が承認した
 列のみを出力する。列ポリシーはコードで固定される。
 
 ## 7. デモ(`clojure -M:dev:run`)
 
-`src/staffing/sim.cljc` が7操作を actor に通す(§sim.cljc docstring 参照):
+`src/staffing/sim.cljk` が7操作を actor に通す(§sim.cljc docstring 参照):
 クリーンな配置(USA) → commit、eligibility 未登録の配置 → hold、JPN 36ヶ月
 上限超過の延長 → hold、残業割増を欠いた給与計算 → hold、tier超過のレポート
 → hold、hazardous-duty 配置 → 人間承認 → commit、異議申立て → 常に人間承認
@@ -144,10 +144,10 @@ intake → advise → govern → decide ─┬─ commit ───────�
 
 ## 8. テスト(`clojure -M:dev:test`)
 
-`test/staffing/policy_contract_test.clj` が**ガバナンス契約を実行可能**に
-する。`test/staffing/phase_test.clj` が段階導入と「異議申立ては恒久的に
+`test/staffing/policy_contract_test.cljk` が**ガバナンス契約を実行可能**に
+する。`test/staffing/phase_test.cljk` が段階導入と「異議申立ては恒久的に
 人間専用」「:phase 省略時に最大権限が付与されない」ことを保証。
-`test/staffing/facts_test.clj` が統計カタログ自体の正直さ(捏造禁止、USA に
+`test/staffing/facts_test.cljk` が統計カタログ自体の正直さ(捏造禁止、USA に
 架空の tenure cap を持たない)を保証。
 
 ## 9. 実装と業態の対応(Randstad/Adecco/ManpowerGroup → temp-staffing actor)

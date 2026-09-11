@@ -72,7 +72,7 @@ phase の `:auto` 集合にも入らない構造的恒久ゲート。
 
 ### 3. R0 の正直なスコープ(捏造禁止)
 
-出典カタログ(`src/staffing/facts.cljc`)は実在する3つの tenure-cap 法規
+出典カタログ(`src/staffing/facts.cljk`)は実在する3つの tenure-cap 法規
 (JPN 労働者派遣法第40条の2 の3年上限、DEU AÜG §1 Abs.1b の18ヶ月上限、
 GBR Agency Workers Regulations 2010 reg.5 の12週均等待遇適格期間)+
 2つの wage-compliance 法的根拠(USA FLSA、JPN 最低賃金法)+ 1つの実在
