@@ -16,7 +16,7 @@
     op10 雇用(phase3・高信頼でも人間が署名。eligibility 再検査) → escalate → approve → commit
     op11 候補者のまま(未雇用)の人物への配置                   → unknown-worker REJECT → hold
 
-  Run: clojure -M:dev:run"
+  Run: kbb -M:dev:run"
   (:require [langgraph.graph :as g]
             [staffing.store :as store]
             [staffing.operation :as op]

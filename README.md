@@ -140,9 +140,9 @@ Hiring here means "this person is now on our books as dispatchable".
 ## Run
 
 ```bash
-clojure -M:dev:test   # governor contract · store parity · phases · facts
-clojure -M:dev:run    # 11-operation demo through one OperationActor
-clojure -M:lint
+kbb -M:dev:test   # governor contract · store parity · phases · facts
+kbb -M:dev:run    # 11-operation demo through one OperationActor
+kbb -M:lint
 ```
 
 ## Non-Negotiables

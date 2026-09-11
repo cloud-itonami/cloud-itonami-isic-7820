@@ -134,7 +134,7 @@ intake → advise → govern → decide ─┬─ commit ───────�
 `src/staffing/report.cljk`。`render-report` は StaffingGovernor が承認した
 列のみを出力する。列ポリシーはコードで固定される。
 
-## 7. デモ(`clojure -M:dev:run`)
+## 7. デモ(`kbb -M:dev:run`)
 
 `src/staffing/sim.cljk` が7操作を actor に通す(§sim.cljc docstring 参照):
 クリーンな配置(USA) → commit、eligibility 未登録の配置 → hold、JPN 36ヶ月
@@ -142,7 +142,7 @@ intake → advise → govern → decide ─┬─ commit ───────�
 → hold、hazardous-duty 配置 → 人間承認 → commit、異議申立て → 常に人間承認
 → commit。
 
-## 8. テスト(`clojure -M:dev:test`)
+## 8. テスト(`kbb -M:dev:test`)
 
 `test/staffing/policy_contract_test.cljk` が**ガバナンス契約を実行可能**に
 する。`test/staffing/phase_test.cljk` が段階導入と「異議申立ては恒久的に
