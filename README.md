@@ -35,7 +35,7 @@ executes a bank transfer — there is no field anywhere in this schema for
 payment execution (see `docs/adr/0001-architecture.md`). It computes and
 records an *approved amount*; a downstream payroll system executes the
 actual payment. Statutory tenure-cap and wage-compliance bases are limited
-to real, citable law (`src/staffing/facts.cljc`) — the actual current
+to real, citable law (`src/staffing/facts.cljk`) — the actual current
 numeric wage-floor rate is always operator-maintained data, never
 hardcoded.
 
