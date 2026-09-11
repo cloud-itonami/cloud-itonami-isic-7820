@@ -6,7 +6,7 @@
   generator at all. This namespace drives the REAL actor stack
   (`staffing.operation` -> `staffing.policy` (StaffingGovernor) ->
   `staffing.store`) through a scenario reused verbatim from this repo's
-  own `staffing.sim` demo driver (`clojure -M:dev:run`) -- that driver was
+  own `staffing.sim` demo driver (`kbb -M:dev:run`) -- that driver was
   run and its output inspected before this file was written, and every id
   it uses (`w-100`/`w-200`/`w-300`/`w-400`, `c-100`/`c-200`/`c-300`,
   `a-100`/`a-300`, `t-100`, `tenant-c100`) was cross-checked against
@@ -22,7 +22,7 @@
   no timestamps in the page content, byte-identical across reruns against
   the same seed (verified by diffing two consecutive runs).
 
-  Usage: `clojure -M:dev:render-html [out-file]`
+  Usage: `kbb -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
   (:require [jp-go-dds.skin]
             [kotoba.lang.text :as str]
@@ -202,7 +202,7 @@
      "<main>\n"
      "  <section class=\"card\">\n"
      "    <h2>Managed assignments</h2>\n"
-     "    <p class=\"muted\">Demo snapshot — build-time-generated from <code>staffing.store</code> via <code>staffing.render-html</code> (<code>clojure -M:dev:render-html</code>), regenerated nightly.</p>\n"
+     "    <p class=\"muted\">Demo snapshot — build-time-generated from <code>staffing.store</code> via <code>staffing.render-html</code> (<code>kbb -M:dev:render-html</code>), regenerated nightly.</p>\n"
      "    <table>\n"
      "      <thead><tr><th>Assignment</th><th>Worker</th><th>Client</th><th>Jurisdiction</th><th>Role</th><th>Status</th><th>Last op status</th></tr></thead>\n"
      "      <tbody>\n"

@@ -29,9 +29,9 @@ io.github.kotoba-lang/langgraph
   :dev {:override-deps
         {io.github.kotoba-lang/langchain
          {:local/root "../../kotoba-lang/langchain"}}}
-  ;; clojure -M:dev:run  → drive the demo through one OperationActor
+  ;; kbb -M:dev:run  → drive the demo through one OperationActor
   :run {:main-opts ["-m" "staffing.sim"]}
-  ;; clojure -M:dev:render-html [out-file]  → build-time operator console
+  ;; kbb -M:dev:render-html [out-file]  → build-time operator console
   :render-html {:main-opts ["-m" "staffing.render-html"]}
   :test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner

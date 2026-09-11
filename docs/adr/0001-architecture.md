@@ -100,8 +100,8 @@ tenure-cap エントリを持たない(一般的な連邦上限が実在しな�
   業態の構造的差異を反映したことを ADR に明記した。
 - (+) `default-phase` を最初から保守的な値(1)に設定し、他 actor で見つ
   かった fail-open バグを未然に回避した。
-- (+) `clojure -M:dev:test`: 全テストパス。`clojure -M:lint`: エラー0・
-  警告0。`clojure -M:dev:run` デモも end-to-end で確認済み(7シナリオ全て
+- (+) `kbb -M:dev:test`: 全テストパス。`kbb -M:lint`: エラー0・
+  警告0。`kbb -M:dev:run` デモも end-to-end で確認済み(7シナリオ全て
   正しく発火)。
 - (-) R0 の tenure-cap カバレッジは3法域のみ(JPN/DEU/GBR)。USA は意図的
   にカバレッジ外(捏造禁止)。
