@@ -4,7 +4,7 @@
   internal honesty (every class it advertises is actually backed by a
   catalog entry, no duplicate/aspirational entries, and no fabricated
   numeric wage rate anywhere in this namespace)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [staffing.facts :as facts]))
 
 (deftest catalog-entries-are-well-formed
