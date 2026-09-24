@@ -9,7 +9,7 @@
   isco-4313's labor recomputation pattern (deps.edn :local/root ->
   governor recomputes -> HARD HOLD on mismatch). This is the template the
   rest of the HR-capability cross-industry rollout copies."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [staffing.policy :as policy]
             [staffing.store :as store]))
 
