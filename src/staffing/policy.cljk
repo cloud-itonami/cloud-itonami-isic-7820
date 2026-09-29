@@ -266,7 +266,7 @@
   to worklaw's legal-hierarchy paths ([:jp]/[:us]/[:eu :de]/[:eu :fr]).
   A jurisdiction worklaw has no rules for resolves to nil, which flows to
   coverage :none -> HARD HOLD. Bare country codes are NOT aliased into a
-  hierarchy (worklaw CLAUDE.md: a French worker is [:eu :fr], not [:fr])."
+  hierarchy (worklaw AGENTS.md: a French worker is [:eu :fr], not [:fr])."
   {:jpn [:jp], :usa [:us], :deu [:eu :de], :fra [:eu :fr]})
 
 (defn- working-time-violations
