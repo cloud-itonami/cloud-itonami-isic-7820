@@ -6,28 +6,40 @@
  :deps {
         ;; kotoba.test (clojure.test-compatible surface), not clojure.test --
         ;; scripts/migrate-clojure-test-to-kotoba-test.cljk. Explicit floor.
-        io.github.kotoba-lang/test {:git/url "https://github.com/kotoba-lang/test.git"
-                                    :git/sha "2ab4885f99fd25552d380d0f6b0b54c5a72eb7ae"}
+        io.github.kotoba-lang/test
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "ee440887baf7dfdfc41b84f0f07af31b05ee6b1a"
+         :deps/root "lib/kotoba.test"}
         ;; kotoba.lang.coll replaced clojure.set here (2026-09-24). An explicit
         ;; floor: kotoba.lang.coll carries clojure.set's union/intersection/
         ;; difference/map-invert from 0ffd5f6, and tools.deps takes the NEWEST
         ;; sha it is shown.
-        io.github.kotoba-lang/coll {:git/sha "0ffd5f6340af50871d4759b06e02ac4fbf9a4bdf"}
+        io.github.kotoba-lang/coll
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "ee440887baf7dfdfc41b84f0f07af31b05ee6b1a"
+         :deps/root "lib/kotoba.coll"}
         ;; kotoba.lang.edn replaced clojure.edn here (2026-09-23). An explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, and kbb resolves git deps
         ;; only from nbb.edn, so every project file this repo has names it.
-        io.github.kotoba-lang/edn {:git/sha "79dba32c8892058842c57783f06a2dfe4601aeb0"}
+        io.github.kotoba-lang/edn
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "ee440887baf7dfdfc41b84f0f07af31b05ee6b1a"
+         :deps/root "lib/kotoba.edn"}
        ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, so without a floor here
         ;; this repo silently rides whatever a sibling happens to name.
-        io.github.kotoba-lang/text {:git/sha "73bdb13ae7a3d004b44bca08be03a3191157a38f"}
+        io.github.kotoba-lang/text
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "ee440887baf7dfdfc41b84f0f07af31b05ee6b1a"
+         :deps/root "lib/kotoba.text"}
        io.github.kotoba-lang/jp-go-digital-design-system
-        {:git/url "https://github.com/kotoba-lang/jp-go-digital-design-system"
-         :git/sha "83db99546eabc53613ae826ea41d1533a3c574af"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "ee440887baf7dfdfc41b84f0f07af31b05ee6b1a"
+         :deps/root "lib/kotoba.jpGoDigitalDesignSystem"}
 io.github.kotoba-lang/langgraph
-        {:local/root "../../kotoba-lang/langgraph"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langgraph"}
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langchainStore"}
         ;; Statutory working-time limits (overtime / breaks / rest periods)
         ;; by jurisdiction. The governor recomputes from :worked-spans via
         ;; worklaw/check — the advisor's hours are never trusted, same
@@ -36,7 +48,7 @@ io.github.kotoba-lang/langgraph
         ;; ADR-2607310300 D8: this is a horizontal capability, not an
         ;; ISIC-coded sector business.
         io.github.kotoba-lang/worklaw
-        {:local/root "../../kotoba-lang/worklaw"}}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.worklaw"}}
  :aliases
  {;; offline workspace dev — pin transitive langchain to local checkout
   :dev {:override-deps
